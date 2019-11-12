@@ -153,6 +153,7 @@ public class BatchMetrics implements Serializable {
         metrics.addWriteCount(this.getWriteCount());
         metrics.addFilterCount(this.getFilterCount());
         metrics.addErrorCount(this.getErrorCount());
+        metrics.setTotal(this.getTotal());
         return metrics;
     }
 
