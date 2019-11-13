@@ -27,8 +27,8 @@ public class BatchMetrics implements Serializable {
     public String report() {
         String str = "{Read: " + readCount.get()
                 + ", Processed: " + processCount.get()
-                + ", Filtered: " + filterCount.get()
                 + ", Written: " + writeCount.get()
+                + ", Filtered: " + filterCount.get()
                 + ", Failed: " + errorCount.get();
         if (null != total) {
             str += ", total: " + total;
@@ -46,8 +46,8 @@ public class BatchMetrics implements Serializable {
         }
         str += ", readCount=" + readCount.get()
                 + ", processCount=" + processCount.get()
-                + ", filterCount=" + filterCount.get()
                 + ", writeCount=" + writeCount.get()
+                + ", filterCount=" + filterCount.get()
                 + ", errorCount=" + errorCount.get()
                 + '}';
         return str;

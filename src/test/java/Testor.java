@@ -16,7 +16,7 @@ public class Testor {
                 .parallelRead(true)
                 .parallelProcess(true)
                 .parallelWrite(true)
-                .forceOrder(true)
+                // .forceOrder(true)
                 .chunkSize(10)
                 .failover(8)
                 .addReader(new TestReader())
