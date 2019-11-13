@@ -14,7 +14,9 @@ public class Testor {
     public static void main(String[] args) {
         SillyBatchBuilder.<Integer>newBuilder()
                 .parallelRead(true)
-                .parallelWrite(false)
+                .parallelProcess(true)
+                .parallelWrite(true)
+                .forceOrder(true)
                 .chunkSize(10)
                 .failover(8)
                 .addReader(new TestReader())

@@ -14,7 +14,11 @@ public final class SillyBatchBuilder<I, O> {
 
     private Boolean parallelRead;
 
+    private Boolean parallelProcess;
+
     private Boolean parallelWrite;
+
+    private Boolean forceOrder;
 
     private Integer chunkSize;
 
@@ -40,7 +44,9 @@ public final class SillyBatchBuilder<I, O> {
         this.processor = builder.processor.addProcessor(processor);
         this.writer = new CompositeRecordWriter<>();
         this.parallelRead = builder.parallelRead;
+        this.parallelProcess = builder.parallelProcess;
         this.parallelWrite = builder.parallelWrite;
+        this.forceOrder = builder.forceOrder;
         this.chunkSize = builder.chunkSize;
         this.failover = builder.failover;
         this.poolSize = builder.poolSize;
@@ -87,8 +93,18 @@ public final class SillyBatchBuilder<I, O> {
         return this;
     }
 
+    public SillyBatchBuilder<I, O> parallelProcess(Boolean parallelProcess) {
+        this.parallelProcess = parallelProcess;
+        return this;
+    }
+
     public SillyBatchBuilder<I, O> parallelWrite(Boolean parallelWrite) {
         this.parallelWrite = parallelWrite;
+        return this;
+    }
+
+    public SillyBatchBuilder<I, O> forceOrder(Boolean forceOrder) {
+        this.forceOrder = forceOrder;
         return this;
     }
 
@@ -139,7 +155,9 @@ public final class SillyBatchBuilder<I, O> {
         }
         Optional.ofNullable(batchName).ifPresent(batch::setName);
         Optional.ofNullable(parallelRead).ifPresent(batch::setParallelRead);
+        Optional.ofNullable(parallelProcess).ifPresent(batch::setParallelProcess);
         Optional.ofNullable(parallelWrite).ifPresent(batch::setParallelWrite);
+        Optional.ofNullable(forceOrder).ifPresent(batch::setForceOrder);
         Optional.ofNullable(chunkSize).ifPresent(batch::setChunkSize);
         Optional.ofNullable(failover).ifPresent(batch::setFailover);
         Optional.ofNullable(poolSize).ifPresent(batch::setPoolSize);

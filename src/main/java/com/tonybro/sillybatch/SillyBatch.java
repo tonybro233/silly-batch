@@ -28,9 +28,11 @@ public class SillyBatch<I, O> {
 
     private boolean parallelRead = false;
 
-    private boolean parallelProcess = false;
+    private boolean parallelProcess = true;
 
     private boolean parallelWrite = false;
+
+    private boolean forceOrder = false;
 
     private int chunkSize = 1;
 
@@ -62,6 +64,8 @@ public class SillyBatch<I, O> {
 
     /* ------------------------- mark -------------------------- */
 
+    private boolean externalExecutor = false;
+
     private volatile boolean readOver;
 
     private volatile boolean readFinished;
@@ -84,7 +88,11 @@ public class SillyBatch<I, O> {
 
     private BatchReporter reporter;
 
-    private HandleManager handleManager;
+    private ReadManager readManager;
+
+    private ProcessManager processManager;
+
+    private WriteManager writeManager;
 
     private Thread mainThread;
 
@@ -102,79 +110,23 @@ public class SillyBatch<I, O> {
         try {
             prepare();
 
-            if (parallelRead) {
-                // start reading
-                for (int i = 0; i <= poolSize; i++) {
-                    readJobQueue.offer(executor.submit(new RecordReadJob()));
-                }
+            if (forceOrder) {
+                readManager.start();
+                readManager.join();
 
-                // start writing
-                handleManager.start();
+                processManager.start();
+                processManager.join();
 
-                // wait finish submit reading job
-                readOverLatch.await();
-
-                // wait reading complete
-                Future<Boolean> future;
-                while (true) {
-                    future = readJobQueue.poll();
-                    if (null != future) {
-                        future.get();
-                    } else {
-                        break;
-                    }
-                }
-                readFinished = true;
-
-                // wait finish submit writing job (parallel write) or writing complete
-                handleManager.join();
+                writeManager.start();
+                writeManager.join();
             } else {
-                List<I> buffer = new ArrayList<>(bufferSize);
-                while (true) {
-                    // read
-                    Collection<I> records = doRead();
-                    if (null != records) {
-                        buffer.addAll(records);
-                    } else {
-                        break;
-                    }
+                readManager.start();
+                processManager.start();
+                writeManager.start();
 
-                    if (aborted.get()) {
-                        return 1;
-                    }
-
-                    // write
-                    if (buffer.size() > chunkSize * THRESHOLD) {
-                        processAndWriteRecords(new ArrayList<>(buffer.subList(0, chunkSize)));
-                        buffer = new ArrayList<>(buffer.subList(chunkSize, buffer.size()));
-                    } else if (buffer.size() >= chunkSize) {
-                        processAndWriteRecords(buffer);
-                        buffer = new ArrayList<>(bufferSize);
-                    }
-                }
-
-                if (aborted.get()) {
-                    return 1;
-                }
-
-                // flush
-                while (buffer.size() > chunkSize * THRESHOLD) {
-                    processAndWriteRecords(new ArrayList<>(buffer.subList(0, chunkSize)));
-                    buffer = new ArrayList<>(buffer.subList(chunkSize, buffer.size()));
-                }
-                if (!buffer.isEmpty()) {
-                    processAndWriteRecords(buffer);
-                }
-            }
-
-            if (aborted.get()) {
-                return 1;
-            }
-
-            if (parallelWrite) {
-                LOGGER.info("Writing job all submitted, shutdown executor and waiting complete ...");
-                executor.shutdown();
-                executor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
+                readManager.join();
+                processManager.join();
+                writeManager.join();
             }
         } catch (InterruptedException ignore) {
             // interrupter will LOGGER the exception
@@ -196,8 +148,10 @@ public class SillyBatch<I, O> {
         if (started) {
             throw new IllegalStateException("This batch instance has already started!");
         }
-        LOGGER.info("Prepare executing {} ! parallelRead={}, parallelWrite={}, poolSize={}, chunk={}, failover={}",
-                name, parallelRead, parallelWrite, poolSize, chunkSize, failover);
+        LOGGER.info("Prepare executing {} !\n parallelRead={}, parallelProcess={}, parallelWrite={}, \n"
+                        + "forceOrder={}, chunk={}, failover={}, poolSize={}",
+                name, parallelRead, parallelProcess, parallelWrite,
+                forceOrder, chunkSize, failover, executor == null ? poolSize : "External");
 
         mainThread = Thread.currentThread();
         metrics = new BatchMetrics();
@@ -211,22 +165,35 @@ public class SillyBatch<I, O> {
         readChunk = chunkSize > 1 && reader.supportReadChunk();
         bufferSize = Math.max(10, chunkSize);
 
+        readQueue = new LinkedBlockingQueue<>();
+        writeQueue = new LinkedBlockingDeque<>();
 
-        processJobQueue = new LinkedList<>();
-        writeJobQueue = new LinkedList<>();
-
-        if (parallelRead || parallelWrite) {
-            executor = new ThreadPoolExecutor(
-                    poolSize, poolSize,
-                    0L, TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<>(),
-                    new BasicThreadFactory.Builder().namingPattern("sb-pool-%d").build());
-        }
         if (parallelRead) {
-            readQueue = new LinkedBlockingQueue<>();
-            readJobQueue = new LinkedBlockingQueue<>();
-            handleManager = new HandleManager();
+            readJobQueue = new LinkedList<>();
         }
+        if (parallelProcess) {
+            processJobQueue = new LinkedList<>();
+        }
+        if (parallelWrite) {
+            writeJobQueue = new LinkedList<>();
+        }
+
+        if (parallelRead || parallelProcess || parallelWrite) {
+            if (null == executor) {
+                executor = new ThreadPoolExecutor(
+                        poolSize, poolSize,
+                        0L, TimeUnit.MILLISECONDS,
+                        new LinkedBlockingQueue<>(),
+                        new BasicThreadFactory.Builder().namingPattern("sb-pool-%d").build());
+            } else {
+                externalExecutor = true;
+            }
+        }
+
+        // create manager
+        readManager = new ReadManager();
+        processManager = new ProcessManager();
+        writeManager = new WriteManager();
 
         // open reader、writer、processor
         openReader();
@@ -246,30 +213,46 @@ public class SillyBatch<I, O> {
         if (null != reporter && reporter.isAlive()) {
             reporter.interrupt();
         }
-        if (null != handleManager && handleManager.isAlive()) {
-            handleManager.interrupt();
+
+        if (readManager.isAlive()) {
+            readManager.interrupt();
         }
+        if (processManager.isAlive()) {
+            processManager.interrupt();
+        }
+        if (writeManager.isAlive()) {
+            writeManager.interrupt();
+        }
+
         if (null != executor) {
-            // executor.shutdownNow();
-            if (!executor.isShutdown()) {
-                LOGGER.info("Terminating executor ...");
-                executor.shutdown();
-            }
-            try {
-                executor.awaitTermination(SHUTDOWN_WAIT, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                LOGGER.error("Waiting termination interrupted.");
-            }
-            if (!executor.isTerminated()) {
-                LOGGER.info("Waiting termination timeout, into force clean mode ...");
-                forceClean = true;
-                executor.shutdownNow();
+            if (externalExecutor) {
+                interruptJobs(readJobQueue);
+                interruptJobs(processJobQueue);
+                interruptJobs(writeJobQueue);
+            } else {
+                if (!executor.isShutdown()) {
+                    LOGGER.info("Terminating executor ...");
+                    executor.shutdown();
+                }
+                try {
+                    executor.awaitTermination(SHUTDOWN_WAIT, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    LOGGER.error("Waiting termination interrupted.");
+                }
+                if (!executor.isTerminated()) {
+                    LOGGER.info("Waiting termination timeout, into force clean mode ...");
+                    forceClean = true;
+                    executor.shutdownNow();
+                }
             }
         }
 
         // clear queue
-        Optional.ofNullable(readJobQueue).ifPresent(Queue::clear);
         Optional.ofNullable(readQueue).ifPresent(Queue::clear);
+        Optional.ofNullable(writeQueue).ifPresent(Queue::clear);
+        Optional.ofNullable(readJobQueue).ifPresent(Queue::clear);
+        Optional.ofNullable(processJobQueue).ifPresent(Queue::clear);
+        Optional.ofNullable(writeJobQueue).ifPresent(Queue::clear);
 
         // close reader、writer、processor
         closeReader();
@@ -323,6 +306,7 @@ public class SillyBatch<I, O> {
             if (null == out) {
                 metrics.incrementFilterCount();
             } else {
+                metrics.incrementProcessCount();
                 writeQueue.offer(out);
             }
         } catch (Exception e) {
@@ -359,28 +343,6 @@ public class SillyBatch<I, O> {
         }
     }
 
-    // private void readRecords() {
-    //     if (parallelRead) {
-    //         for (int i = 0; i <= poolSize; i++) {
-    //             readJobQueue.offer(executor.submit(new RecordReadJob()));
-    //         }
-    //     } else {
-    //         while (true) {
-    //             if (aborted.get()) {
-    //                 return;
-    //             }
-    //             Collection<I> records = doRead();
-    //             if (null != records) {
-    //                 for (I record : records) {
-    //                     readQueue.offer(record);
-    //                 }
-    //             } else {
-    //                 break;
-    //             }
-    //         }
-    //     }
-    // }
-
     private void processRecord(I record) {
         if (parallelProcess) {
             processJobQueue.offer(executor.submit(new RecordProcessJob(record)));
@@ -394,15 +356,6 @@ public class SillyBatch<I, O> {
             executor.submit(new RecordWriteJob(records));
         } else {
             doWrite(records);
-        }
-    }
-
-
-    private void processAndWriteRecords(List<I> buffer) {
-        if (parallelWrite) {
-            executor.submit(new RecordHandlingJob(buffer));
-        } else {
-            processAndWrite(buffer);
         }
     }
 
@@ -465,6 +418,15 @@ public class SillyBatch<I, O> {
         }
     }
 
+    private void interruptJobs(Queue<Future<Boolean>> queue) {
+        if (null != queue) {
+            Future<Boolean> future;
+            while ((future = queue.poll()) != null) {
+                future.cancel(true);
+            }
+        }
+    }
+
     private static class FailOverExceededException extends RuntimeException {
         public FailOverExceededException() {
             super("Exceed failover, abort execution.");
@@ -504,6 +466,58 @@ public class SillyBatch<I, O> {
                 }
             }
         }
+    }
+
+    private final class ReadManager extends Thread {
+
+        ReadManager() {
+            super("read-manager");
+        }
+
+        @Override
+        public void run() {
+            LOGGER.info("Read manager started ...");
+            try {
+                if (parallelRead) {
+                    for (int i = 0; i <= poolSize; i++) {
+                        readJobQueue.offer(executor.submit(new RecordReadJob()));
+                    }
+                    readOverLatch.await();
+                    waitForJobs(readJobQueue);
+                } else {
+                    while (true) {
+                        if (aborted.get()) {
+                            return;
+                        }
+                        Collection<I> records = doRead();
+                        if (null != records) {
+                            for (I record : records) {
+                                readQueue.offer(record);
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            } catch (InterruptedException | BatchAbortedException ignore) {
+                // InterruptedException: only main thread will interrupt manager
+                // BatchAbortedException: stopped by processor or writer, just return
+            } catch (FailOverExceededException e) {
+                // prevent repeat LOGGER
+                if (aborted.compareAndSet(false, true)) {
+                    LOGGER.error("Exceed failover, abort execution.");
+                    mainThread.interrupt();
+                }
+            } catch (Exception e) {
+                LOGGER.error("Unexpected error happened while reading records, abort execution.", e);
+                aborted.set(true);
+                mainThread.interrupt();
+            } finally {
+                LOGGER.info("Read manager stopped.");
+                readFinished = true;
+            }
+        }
+
     }
 
     private final class ProcessManager extends Thread {
@@ -611,76 +625,6 @@ public class SillyBatch<I, O> {
         }
     }
 
-    private final class HandleManager extends Thread {
-
-        HandleManager() {
-            super("handle-manager");
-        }
-
-        @Override
-        public void run() {
-            LOGGER.info("HandleManager started ...");
-            try {
-                I record;
-                List<I> buffer = new ArrayList<>(bufferSize);
-                while (!readFinished) {
-                    record = readQueue.poll(QUEUE_WAIT, TimeUnit.MILLISECONDS);
-                    if (aborted.get()) {
-                        return;
-                    }
-                    if (null != record) {
-                        buffer.add(record);
-                        if (buffer.size() == chunkSize) {
-                            processAndWriteRecords(buffer);
-                            buffer = new ArrayList<>(bufferSize);
-                        }
-                    }
-                }
-
-                if (aborted.get()) {
-                    return;
-                }
-
-                // flush
-                while (true) {
-                    if (buffer.size() == chunkSize) {
-                        processAndWriteRecords(buffer);
-                        buffer = new ArrayList<>(bufferSize);
-                    }
-
-                    if (aborted.get()) {
-                        return;
-                    }
-
-                    record = readQueue.poll();
-                    if (null != record) {
-                        buffer.add(record);
-                    } else {
-                        if (!buffer.isEmpty()) {
-                            processAndWriteRecords(buffer);
-                        }
-                        break;
-                    }
-                }
-            } catch (InterruptedException | BatchAbortedException ignore) {
-                // InterruptedException: only main thread will interrupt manager
-                // BatchAbortedException: parallel read and order write, writer stopped by reader, just return
-            } catch (FailOverExceededException e) {
-                // prevent repeat LOGGER
-                if (aborted.compareAndSet(false, true)) {
-                    LOGGER.error("Exceed failover, abort execution.");
-                    mainThread.interrupt();
-                }
-            } catch (Exception e) {
-                LOGGER.error("Unexpected error happened while processing or writing records, abort execution.", e);
-                aborted.set(true);
-                mainThread.interrupt();
-            } finally {
-                LOGGER.info("HandleManager stopped.");
-            }
-        }
-    }
-
     private class RecordProcessJob implements Callable<Boolean> {
 
         I record;
@@ -736,37 +680,6 @@ public class SillyBatch<I, O> {
             } catch (BatchAbortedException ignore) {
             } catch (Exception e) {
                 LOGGER.error("Unexpected error happened while writing record, abort execution.", e);
-                aborted.set(true);
-                mainThread.interrupt();
-            }
-            return true;
-        }
-    }
-
-    private class RecordHandlingJob implements Callable<Boolean> {
-
-        List<I> records;
-
-        RecordHandlingJob(List<I> records) {
-            this.records = records;
-        }
-
-        @Override
-        public Boolean call() throws Exception {
-            if (aborted.get()) {
-                return false;
-            }
-            try {
-                processAndWrite(records);
-            } catch (FailOverExceededException e) {
-                // prevent repeat LOGGER
-                if (aborted.compareAndSet(false, true)) {
-                    LOGGER.error("Exceed failover, abort execution.");
-                    mainThread.interrupt();
-                }
-            } catch (BatchAbortedException ignore) {
-            } catch (Exception e) {
-                LOGGER.error("Unexpected error happened while processing or writing records, abort execution.", e);
                 aborted.set(true);
                 mainThread.interrupt();
             }
@@ -902,6 +815,10 @@ public class SillyBatch<I, O> {
 
     public void setParallelWrite(boolean parallelWrite) {
         this.parallelWrite = parallelWrite;
+    }
+
+    public void setForceOrder(boolean ordered) {
+        this.forceOrder = ordered;
     }
 
     public void setChunkSize(int chunkSize) {

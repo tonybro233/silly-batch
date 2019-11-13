@@ -16,17 +16,20 @@ public class BatchMetrics implements Serializable {
 
     private AtomicLong readCount = new AtomicLong();
 
-    private AtomicLong writeCount = new AtomicLong();
+    private AtomicLong processCount = new AtomicLong();
 
     private AtomicLong filterCount = new AtomicLong();
+
+    private AtomicLong writeCount = new AtomicLong();
 
     private AtomicLong errorCount = new AtomicLong();
 
     public String report() {
-        String str = "{read: " + readCount.get()
-                + ", written: " + writeCount.get()
-                + ", filtered: " + filterCount.get()
-                + ", failed: " + errorCount.get();
+        String str = "{Read: " + readCount.get()
+                + ", Processed: " + processCount.get()
+                + ", Filtered: " + filterCount.get()
+                + ", Written: " + writeCount.get()
+                + ", Failed: " + errorCount.get();
         if (null != total) {
             str += ", total: " + total;
         }
@@ -42,8 +45,9 @@ public class BatchMetrics implements Serializable {
             str += ", duration=" + Duration.between(startTime, endTime);
         }
         str += ", readCount=" + readCount.get()
-                + ", writeCount=" + writeCount.get()
+                + ", processCount=" + processCount.get()
                 + ", filterCount=" + filterCount.get()
+                + ", writeCount=" + writeCount.get()
                 + ", errorCount=" + errorCount.get()
                 + '}';
         return str;
@@ -53,48 +57,60 @@ public class BatchMetrics implements Serializable {
         return readCount.get();
     }
 
-    public long getWriteCount() {
-        return writeCount.get();
+    public long getProcessCount() {
+        return processCount.get();
     }
 
     public long getFilterCount() {
         return filterCount.get();
     }
 
+    public long getWriteCount() {
+        return writeCount.get();
+    }
+
     public long getErrorCount() {
         return errorCount.get();
-    }
-
-    public void incrementFilterCount() {
-        filterCount.incrementAndGet();
-    }
-
-    public void incrementErrorCount() {
-        errorCount.incrementAndGet();
     }
 
     public void incrementReadCount() {
         readCount.incrementAndGet();
     }
 
+    public void incrementProcessCount() {
+        processCount.incrementAndGet();
+    }
+
+    public void incrementFilterCount() {
+        filterCount.incrementAndGet();
+    }
+
     public void incrementWriteCount() {
         writeCount.incrementAndGet();
     }
 
-    public void addFilterCount(long delta) {
-        filterCount.addAndGet(delta);
-    }
-
-    public void addErrorCount(long delta) {
-        errorCount.addAndGet(delta);
+    public void incrementErrorCount() {
+        errorCount.incrementAndGet();
     }
 
     public void addReadCount(long delta) {
         readCount.addAndGet(delta);
     }
 
+    public void addProcessCount(long delta) {
+        writeCount.addAndGet(delta);
+    }
+
+    public void addFilterCount(long delta) {
+        filterCount.addAndGet(delta);
+    }
+
     public void addWriteCount(long delta) {
         writeCount.addAndGet(delta);
+    }
+
+    public void addErrorCount(long delta) {
+        errorCount.addAndGet(delta);
     }
 
     public LocalDateTime getStartTime() {
@@ -131,8 +147,9 @@ public class BatchMetrics implements Serializable {
         }
         BatchMetrics that = (BatchMetrics) o;
         return getReadCount() == that.getReadCount()
-                && getWriteCount() == that.getWriteCount()
+                && getProcessCount() == that.getProcessCount()
                 && getFilterCount() == that.getFilterCount()
+                && getWriteCount() == that.getWriteCount()
                 && getErrorCount() == that.getErrorCount()
                 && Objects.equals(getTotal(), that.getTotal())
                 && Objects.equals(getStartTime(), that.getStartTime())
@@ -142,7 +159,7 @@ public class BatchMetrics implements Serializable {
     @Override
     public int hashCode() {
         return Objects.hash(getStartTime(), getEndTime(), getTotal(),
-                getReadCount(), getWriteCount(), getFilterCount(), getErrorCount());
+                getReadCount(), getProcessCount(), getFilterCount(), getWriteCount(), getErrorCount());
     }
 
     public BatchMetrics copy() {
@@ -150,8 +167,9 @@ public class BatchMetrics implements Serializable {
         metrics.setStartTime(this.getStartTime());
         metrics.setEndTime(this.getEndTime());
         metrics.addReadCount(this.getReadCount());
-        metrics.addWriteCount(this.getWriteCount());
+        metrics.addProcessCount(this.getProcessCount());
         metrics.addFilterCount(this.getFilterCount());
+        metrics.addWriteCount(this.getWriteCount());
         metrics.addErrorCount(this.getErrorCount());
         metrics.setTotal(this.getTotal());
         return metrics;
