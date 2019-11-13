@@ -29,7 +29,7 @@ public class SillyBatch<I, O> {
 
     private boolean parallelRead = false;
 
-    private boolean parallelProcess = true;
+    private boolean parallelProcess = false;
 
     private boolean parallelWrite = false;
 
@@ -851,6 +851,10 @@ public class SillyBatch<I, O> {
             throw new IllegalArgumentException("PoolSize must be positive!");
         }
         this.poolSize = poolSize;
+    }
+
+    public void setExecutor(ExecutorService executor) {
+        this.executor = executor;
     }
 
     public void setReport(boolean report) {

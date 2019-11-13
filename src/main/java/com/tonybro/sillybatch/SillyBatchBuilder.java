@@ -1,6 +1,7 @@
 package com.tonybro.sillybatch;
 
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
 
 public final class SillyBatchBuilder<I, O> {
 
@@ -26,6 +27,8 @@ public final class SillyBatchBuilder<I, O> {
 
     private Integer poolSize;
 
+    private ExecutorService executor;
+
     private Boolean report;
 
     private Long reportInterval;
@@ -50,6 +53,7 @@ public final class SillyBatchBuilder<I, O> {
         this.chunkSize = builder.chunkSize;
         this.failover = builder.failover;
         this.poolSize = builder.poolSize;
+        this.executor = builder.executor;
         this.report = builder.report;
         this.reportInterval = builder.reportInterval;
     }
@@ -123,6 +127,11 @@ public final class SillyBatchBuilder<I, O> {
         return this;
     }
 
+    public SillyBatchBuilder<I, O> executor(ExecutorService executor) {
+        this.executor = executor;
+        return this;
+    }
+
     public SillyBatchBuilder<I, O> report(boolean report) {
         this.report = report;
         return this;
@@ -161,6 +170,7 @@ public final class SillyBatchBuilder<I, O> {
         Optional.ofNullable(chunkSize).ifPresent(batch::setChunkSize);
         Optional.ofNullable(failover).ifPresent(batch::setFailover);
         Optional.ofNullable(poolSize).ifPresent(batch::setPoolSize);
+        Optional.ofNullable(executor).ifPresent(batch::setExecutor);
         Optional.ofNullable(report).ifPresent(batch::setReport);
         Optional.ofNullable(reportInterval).ifPresent(batch::setReportInterval);
 
