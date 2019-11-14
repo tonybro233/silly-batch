@@ -373,7 +373,7 @@ public class SillyBatch<I, O> {
 
     private void writeRecords(List<O> records) {
         if (parallelWrite) {
-            executor.submit(new RecordWriteJob(records));
+            writeJobQueue.offer(executor.submit(new RecordWriteJob(records)));
         } else {
             doWrite(records);
         }
