@@ -27,7 +27,11 @@ public final class SillyBatchBuilder<I, O> {
 
     private Integer poolSize;
 
-    private ExecutorService executor;
+    private ExecutorService readExecutor;
+
+    private ExecutorService processExecutor;
+
+    private ExecutorService writeExecutor;
 
     private Boolean report;
 
@@ -53,7 +57,9 @@ public final class SillyBatchBuilder<I, O> {
         this.chunkSize = builder.chunkSize;
         this.failover = builder.failover;
         this.poolSize = builder.poolSize;
-        this.executor = builder.executor;
+        this.readExecutor = builder.readExecutor;
+        this.processExecutor = builder.processExecutor;
+        this.writeExecutor = builder.writeExecutor;
         this.report = builder.report;
         this.reportInterval = builder.reportInterval;
     }
@@ -97,17 +103,44 @@ public final class SillyBatchBuilder<I, O> {
         return this;
     }
 
-    public SillyBatchBuilder<I, O> parallelProcess(Boolean parallelProcess) {
+    public SillyBatchBuilder<I, O> parallelRead(ExecutorService executor) {
+        if (null == executor) {
+            throw new NullPointerException();
+        }
+        this.readExecutor = executor;
+        this.parallelRead = true;
+        return this;
+    }
+
+    public SillyBatchBuilder<I, O> parallelProcess(boolean parallelProcess) {
         this.parallelProcess = parallelProcess;
         return this;
     }
 
-    public SillyBatchBuilder<I, O> parallelWrite(Boolean parallelWrite) {
+    public SillyBatchBuilder<I, O> parallelProcess(ExecutorService executor) {
+        if (null == executor) {
+            throw new NullPointerException();
+        }
+        this.processExecutor = executor;
+        this.parallelProcess = true;
+        return this;
+    }
+
+    public SillyBatchBuilder<I, O> parallelWrite(boolean parallelWrite) {
         this.parallelWrite = parallelWrite;
         return this;
     }
 
-    public SillyBatchBuilder<I, O> forceOrder(Boolean forceOrder) {
+    public SillyBatchBuilder<I, O> parallelWrite(ExecutorService executor) {
+        if (null == executor) {
+            throw new NullPointerException();
+        }
+        this.writeExecutor = executor;
+        this.parallelWrite = true;
+        return this;
+    }
+
+    public SillyBatchBuilder<I, O> forceOrder(boolean forceOrder) {
         this.forceOrder = forceOrder;
         return this;
     }
@@ -124,11 +157,6 @@ public final class SillyBatchBuilder<I, O> {
 
     public SillyBatchBuilder<I, O> poolSize(int poolSize) {
         this.poolSize = poolSize;
-        return this;
-    }
-
-    public SillyBatchBuilder<I, O> executor(ExecutorService executor) {
-        this.executor = executor;
         return this;
     }
 
@@ -170,7 +198,9 @@ public final class SillyBatchBuilder<I, O> {
         Optional.ofNullable(chunkSize).ifPresent(batch::setChunkSize);
         Optional.ofNullable(failover).ifPresent(batch::setFailover);
         Optional.ofNullable(poolSize).ifPresent(batch::setPoolSize);
-        Optional.ofNullable(executor).ifPresent(batch::setExecutor);
+        Optional.ofNullable(readExecutor).ifPresent(batch::setParallelRead);
+        Optional.ofNullable(processExecutor).ifPresent(batch::setParallelProcess);
+        Optional.ofNullable(writeExecutor).ifPresent(batch::setParallelWrite);
         Optional.ofNullable(report).ifPresent(batch::setReport);
         Optional.ofNullable(reportInterval).ifPresent(batch::setReportInterval);
 

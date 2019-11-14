@@ -49,7 +49,11 @@ public class SillyBatch<I, O> {
 
     /* --------------------- multi thread ---------------------- */
 
-    private ExecutorService executor;
+    private ExecutorService readExecutor;
+
+    private ExecutorService processExecutor;
+
+    private ExecutorService writeExecutor;
 
     private Queue<Future<?>> readJobQueue;
 
@@ -65,7 +69,11 @@ public class SillyBatch<I, O> {
 
     /* ------------------------- mark -------------------------- */
 
-    private boolean externalExecutor = false;
+    private boolean externalReadExecutor = false;
+
+    private boolean externalProcessExecutor = false;
+
+    private boolean externalWriteExecutor = false;
 
     private volatile boolean readOver;
 
@@ -104,6 +112,8 @@ public class SillyBatch<I, O> {
     private static final long QUEUE_WAIT = 500L;
 
     private static final long SHUTDOWN_WAIT = 10000L;
+
+    private static final long THREAD_TIMEOUT = 5000L;
 
     private static final double THRESHOLD = 1.1D;
 
@@ -152,9 +162,9 @@ public class SillyBatch<I, O> {
             throw new IllegalStateException("This batch instance has already started!");
         }
         LOGGER.info("Prepare executing {} !\nparallelRead={}, parallelProcess={}, parallelWrite={}, \n"
-                        + "forceOrder={}, chunk={}, failover={}, poolSize={}",
+                        + "forceOrder={}, chunk={}, failover={}, default-poolSize={}",
                 name, parallelRead, parallelProcess, parallelWrite,
-                forceOrder, chunkSize, failover, executor == null ? poolSize : "External");
+                forceOrder, chunkSize, failover, poolSize);
 
         mainThread = Thread.currentThread();
         metrics = new BatchMetrics();
@@ -175,38 +185,42 @@ public class SillyBatch<I, O> {
 
         if (parallelRead) {
             readJobQueue = new LinkedList<>();
+            if (!externalReadExecutor) {
+                readExecutor = new ThreadPoolExecutor(
+                        poolSize, poolSize,
+                        THREAD_TIMEOUT, TimeUnit.MILLISECONDS,
+                        new LinkedBlockingQueue<>(),
+                        new BasicThreadFactory.Builder()
+                                .namingPattern("sb-reader-%d")
+                                .build());
+                ((ThreadPoolExecutor) readExecutor).allowCoreThreadTimeOut(true);
+            }
         }
         if (parallelProcess) {
             processJobQueue = new LinkedList<>();
+            if (!externalProcessExecutor) {
+                processExecutor = new ThreadPoolExecutor(
+                        poolSize, poolSize,
+                        THREAD_TIMEOUT, TimeUnit.MILLISECONDS,
+                        new LinkedBlockingQueue<>(),
+                        new BasicThreadFactory.Builder()
+                                .namingPattern("sb-processor-%d")
+                                .priority(Thread.NORM_PRIORITY + 1)
+                                .build());
+                ((ThreadPoolExecutor) processExecutor).allowCoreThreadTimeOut(true);
+            }
         }
         if (parallelWrite) {
             writeJobQueue = new LinkedList<>();
-        }
-
-        if (parallelRead || parallelProcess || parallelWrite) {
-            if (null == executor) {
-                if (forceOrder) {
-                    executor = new ThreadPoolExecutor(
-                            poolSize, poolSize,
-                            0L, TimeUnit.MILLISECONDS,
-                            new LinkedBlockingQueue<>(),
-                            new BasicThreadFactory.Builder().namingPattern("sb-pool-%d").build());
-                } else {
-                    /*
-                      The reason to use PriorityThreadPoolExecutor and PriorityBlockingQueue
-                      is while using unbound LinkedBlockingQueue, if reading record is much
-                      faster than processing and writing (which is common), processing jobs
-                      will all be submitted soon, and it cause writing jobs wait for all
-                      processing job done.
-                    */
-                    executor = new PriorityThreadPoolExecutor(
-                            poolSize, poolSize,
-                            0L, TimeUnit.MILLISECONDS,
-                            new PriorityBlockingQueue<>(),
-                            new BasicThreadFactory.Builder().namingPattern("sb-pool-%d").build());
-                }
-            } else {
-                externalExecutor = true;
+            if (!externalWriteExecutor) {
+                writeExecutor = new ThreadPoolExecutor(
+                        poolSize, poolSize,
+                        THREAD_TIMEOUT, TimeUnit.MILLISECONDS,
+                        new LinkedBlockingQueue<>(),
+                        new BasicThreadFactory.Builder()
+                                .namingPattern("sb-writer-%d")
+                                .priority(Thread.NORM_PRIORITY + 2)
+                                .build());
             }
         }
 
@@ -244,27 +258,46 @@ public class SillyBatch<I, O> {
             writeManager.interrupt();
         }
 
-        if (null != executor) {
-            if (externalExecutor) {
+        if (parallelRead) {
+            if (externalReadExecutor) {
                 interruptJobs(readJobQueue);
+            } else {
+                tryShutdownExecutor(readExecutor, "readExecutor");
+            }
+        }
+
+        if (parallelProcess) {
+            if (externalProcessExecutor) {
                 interruptJobs(processJobQueue);
+            } else {
+                tryShutdownExecutor(processExecutor, "processExecutor");
+            }
+        }
+
+        if (parallelWrite) {
+            if (externalWriteExecutor) {
                 interruptJobs(writeJobQueue);
             } else {
-                if (!executor.isShutdown()) {
-                    LOGGER.info("Terminating executor ...");
-                    executor.shutdown();
-                }
-                try {
-                    executor.awaitTermination(SHUTDOWN_WAIT, TimeUnit.MILLISECONDS);
-                } catch (InterruptedException e) {
-                    LOGGER.error("Waiting termination interrupted.");
-                }
-                if (!executor.isTerminated()) {
-                    LOGGER.info("Waiting termination timeout, into force clean mode ...");
-                    forceClean = true;
-                    executor.shutdownNow();
-                }
+                tryShutdownExecutor(writeExecutor, "writeExecutor");
             }
+        }
+
+        if (parallelRead && !externalReadExecutor && !readExecutor.isTerminated()) {
+            LOGGER.info("Wait for readExecutor to be terminated timeout, into force clean mode ...");
+            forceClean = true;
+            readExecutor.shutdownNow();
+        }
+
+        if (parallelProcess && !externalProcessExecutor && !processExecutor.isTerminated()) {
+            LOGGER.info("Wait for processExecutor to be terminated timeout, into force clean mode ...");
+            forceClean = true;
+            processExecutor.shutdownNow();
+        }
+
+        if (parallelWrite && !externalWriteExecutor && !writeExecutor.isTerminated()) {
+            LOGGER.info("Wait for writeExecutor to be terminated timeout, into force clean mode ...");
+            forceClean = true;
+            writeExecutor.shutdownNow();
         }
 
         // clear queue
@@ -281,6 +314,18 @@ public class SillyBatch<I, O> {
 
         started = false;
         LOGGER.info("Execution {}!\n{}", aborted.get() ? "failed" : "succeeded", metrics.toString());
+    }
+
+    private void tryShutdownExecutor(ExecutorService executor, String desc) {
+        if (!executor.isShutdown()) {
+            LOGGER.info("Terminating {} ...", desc);
+            executor.shutdown();
+        }
+        try {
+            executor.awaitTermination(SHUTDOWN_WAIT, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            LOGGER.error("Wait for {} to be terminated interrupted.", desc);
+        }
     }
 
     private Collection<I> doRead() {
@@ -365,7 +410,7 @@ public class SillyBatch<I, O> {
 
     private void processRecord(I record) {
         if (parallelProcess) {
-            processJobQueue.offer(executor.submit(new RecordProcessJob(record)));
+            processJobQueue.offer(processExecutor.submit(new RecordProcessJob(record)));
         } else {
             doProcess(record);
         }
@@ -373,7 +418,7 @@ public class SillyBatch<I, O> {
 
     private void writeRecords(List<O> records) {
         if (parallelWrite) {
-            writeJobQueue.offer(executor.submit(new RecordWriteJob(records)));
+            writeJobQueue.offer(writeExecutor.submit(new RecordWriteJob(records)));
         } else {
             doWrite(records);
         }
@@ -386,7 +431,7 @@ public class SillyBatch<I, O> {
                 try {
                     future.get();
                 } catch (ExecutionException e) {
-                    LOGGER.error("Unexpected error while waiting job complete.", e);
+                    LOGGER.error("Unexpected error while waiting for job to be completed.", e);
                 }
             }
         }
@@ -454,7 +499,7 @@ public class SillyBatch<I, O> {
             try {
                 if (parallelRead) {
                     for (int i = 0; i <= poolSize; i++) {
-                        readJobQueue.offer(executor.submit(new RecordReadJob()));
+                        readJobQueue.offer(readExecutor.submit(new RecordReadJob()));
                     }
                     readOverLatch.await();
                     waitForJobs(readJobQueue);
@@ -665,7 +710,7 @@ public class SillyBatch<I, O> {
                 mainThread.interrupt();
             } finally {
                 if (!readOver && !aborted.get()) {
-                    readJobQueue.offer(executor.submit(new RecordReadJob()));
+                    readJobQueue.offer(readExecutor.submit(new RecordReadJob()));
                 }
             }
         }
@@ -822,12 +867,30 @@ public class SillyBatch<I, O> {
         this.parallelRead = parallelRead;
     }
 
+    public void setParallelRead(ExecutorService executor) {
+        this.parallelRead = true;
+        this.readExecutor = executor;
+        this.externalReadExecutor = true;
+    }
+
     public void setParallelProcess(boolean parallelProcess) {
         this.parallelProcess = parallelProcess;
     }
 
+    public void setParallelProcess(ExecutorService executor) {
+        this.parallelProcess = true;
+        this.processExecutor = executor;
+        this.externalProcessExecutor = true;
+    }
+
     public void setParallelWrite(boolean parallelWrite) {
         this.parallelWrite = parallelWrite;
+    }
+
+    public void setParallelWrite(ExecutorService executor) {
+        this.parallelWrite = true;
+        this.writeExecutor = executor;
+        this.externalWriteExecutor = true;
     }
 
     public void setForceOrder(boolean ordered) {
@@ -853,10 +916,6 @@ public class SillyBatch<I, O> {
             throw new IllegalArgumentException("PoolSize must be positive!");
         }
         this.poolSize = poolSize;
-    }
-
-    public void setExecutor(ExecutorService executor) {
-        this.executor = executor;
     }
 
     public void setReport(boolean report) {
