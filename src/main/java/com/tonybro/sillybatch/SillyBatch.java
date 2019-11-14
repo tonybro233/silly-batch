@@ -380,12 +380,14 @@ public class SillyBatch<I, O> {
     }
 
     private void waitForJobs(Queue<Future<?>> queue) throws InterruptedException {
-        Future<?> future;
-        while ((future = queue.poll()) != null) {
-            try {
-                future.get();
-            } catch (ExecutionException e) {
-                LOGGER.error("Unexpected error while waiting job complete.", e);
+        if (null != queue) {
+            Future<?> future;
+            while ((future = queue.poll()) != null) {
+                try {
+                    future.get();
+                } catch (ExecutionException e) {
+                    LOGGER.error("Unexpected error while waiting job complete.", e);
+                }
             }
         }
     }
