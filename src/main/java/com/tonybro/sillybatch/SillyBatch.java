@@ -2,6 +2,7 @@ package com.tonybro.sillybatch;
 
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -9,34 +10,50 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Simple and fast batch framework, using producer/consumer model,
+ * good at boosting job by doing things concurrently.
+ *
+ * <p>Three classic steps: Read -> Process -> Write, you can choose
+ * handling records orderly or concurrently at every step.
+ *
+ * <p>Using {@link SillyBatchBuilder} to build an instance.
+ *
+ * @author tony
+ */
 public class SillyBatch<I, O> {
 
-    private static final Logger LOGGER = org.slf4j.LoggerFactory.getLogger(SillyBatch.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SillyBatch.class);
 
 
-    // 傻批
-    private String name = "SillyBatch";
+    private String name = "silly batch";
 
     /* ------------------------- core -------------------------- */
 
     private RecordReader<I> reader;
 
-    private RecordWriter<O> writer;
-
     private RecordProcessor<I, O> processor;
+
+    private RecordWriter<O> writer;
 
     /* ------------------------- param -------------------------- */
 
+    // read record concurrently
     private boolean parallelRead = false;
 
+    // process record concurrently
     private boolean parallelProcess = false;
 
+    // write record concurrently
     private boolean parallelWrite = false;
 
+    // do reading, processing, writing in order
     private boolean forceOrder = false;
 
+    // chunk size for reading and writing
     private int chunkSize = 1;
 
+    // threshold of error
     private long failover = 0;
 
     // report metrics continuously by logging
@@ -45,6 +62,7 @@ public class SillyBatch<I, O> {
     // report interval
     private long reportInterval = 2000;
 
+    // default pool size while creating executors(fixed thread pool)
     private int poolSize = Runtime.getRuntime().availableProcessors() * 2;
 
     /* --------------------- multi thread ---------------------- */
@@ -158,9 +176,7 @@ public class SillyBatch<I, O> {
     }
 
     private void prepare() throws Exception {
-        if (started) {
-            throw new IllegalStateException("This batch instance has already started!");
-        }
+        throwExceptionIfStarted();
         LOGGER.info("Prepare executing {} !\nparallelRead={}, parallelProcess={}, parallelWrite={}, \n"
                         + "forceOrder={}, chunk={}, failover={}, default-poolSize={}",
                 name, parallelRead, parallelProcess, parallelWrite,
@@ -314,6 +330,12 @@ public class SillyBatch<I, O> {
 
         started = false;
         LOGGER.info("Execution {}!\n{}", aborted.get() ? "failed" : "succeeded", metrics.toString());
+    }
+
+    private void throwExceptionIfStarted() {
+        if (started) {
+            throw new IllegalStateException("This batch instance has already started!");
+        }
     }
 
     private void tryShutdownExecutor(ExecutorService executor, String desc) {
@@ -848,56 +870,68 @@ public class SillyBatch<I, O> {
     /* --------------------- setter ---------------------- */
 
     public void setName(String name) {
+        throwExceptionIfStarted();
         this.name = name;
     }
 
     public void setReader(RecordReader<I> reader) {
+        throwExceptionIfStarted();
         this.reader = reader;
     }
 
     public void setWriter(RecordWriter<O> writer) {
+        throwExceptionIfStarted();
         this.writer = writer;
     }
 
     public void setProcessor(RecordProcessor<I, O> processor) {
+        throwExceptionIfStarted();
         this.processor = processor;
     }
 
     public void setParallelRead(boolean parallelRead) {
+        throwExceptionIfStarted();
         this.parallelRead = parallelRead;
     }
 
     public void setParallelRead(ExecutorService executor) {
+        throwExceptionIfStarted();
         this.parallelRead = true;
         this.readExecutor = executor;
         this.externalReadExecutor = true;
     }
 
     public void setParallelProcess(boolean parallelProcess) {
+        throwExceptionIfStarted();
         this.parallelProcess = parallelProcess;
     }
 
     public void setParallelProcess(ExecutorService executor) {
+        throwExceptionIfStarted();
         this.parallelProcess = true;
         this.processExecutor = executor;
         this.externalProcessExecutor = true;
     }
 
     public void setParallelWrite(boolean parallelWrite) {
+        throwExceptionIfStarted();
         this.parallelWrite = parallelWrite;
     }
 
     public void setParallelWrite(ExecutorService executor) {
+        throwExceptionIfStarted();
         this.parallelWrite = true;
         this.writeExecutor = executor;
         this.externalWriteExecutor = true;
     }
 
     public void setForceOrder(boolean ordered) {
+        throwExceptionIfStarted();
         this.forceOrder = ordered;
     }
 
     public void setChunkSize(int chunkSize) {
+        throwExceptionIfStarted();
         if (chunkSize <= 0) {
             throw new IllegalArgumentException("ChunkSize must be positive!");
         }
@@ -905,13 +939,12 @@ public class SillyBatch<I, O> {
     }
 
     public void setFailover(long failover) {
-        if (failover < 0) {
-            throw new IllegalArgumentException("Failover must not be negative!");
-        }
+        throwExceptionIfStarted();
         this.failover = failover;
     }
 
     public void setPoolSize(int poolSize) {
+        throwExceptionIfStarted();
         if (poolSize <= 0) {
             throw new IllegalArgumentException("PoolSize must be positive!");
         }
@@ -919,6 +952,7 @@ public class SillyBatch<I, O> {
     }
 
     public void setReport(boolean report) {
+        throwExceptionIfStarted();
         this.report = report;
     }
 
