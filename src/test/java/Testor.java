@@ -51,7 +51,7 @@ public class Testor {
 
     public static class TestProcessor implements RecordProcessor<Integer, Integer> {
         @Override
-        public Integer processRecord(Integer record) throws Exception {
+        public Integer process(Integer record) throws Exception {
             if (record % 2 == 0) {
                 return record * 2;
             } else {

@@ -39,10 +39,10 @@ public class CompositeRecordProcessor <I, O> implements RecordProcessor<I, O> {
 
     @Override
     @SuppressWarnings("unchecked")
-    public O processRecord(I record) throws Exception {
+    public O process(I record) throws Exception {
         Object out = record;
         for (RecordProcessor processor : processors) {
-            out = processor.processRecord(out);
+            out = processor.process(out);
             if (out == null) {
                 return null;
             }

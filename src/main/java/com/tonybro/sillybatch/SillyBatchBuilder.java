@@ -93,7 +93,7 @@ public final class SillyBatchBuilder<I, O> {
 
     public <K> SillyBatchBuilder<I, K> addProcessor(RecordProcessor<O, K> processor) {
         if (this.writer.size() > 0) {
-            throw new IllegalStateException("Cannot add writer before processor");
+            throw new IllegalStateException("Cannot add processor as writer has been set!");
         }
         return new SillyBatchBuilder<>(this, processor);
     }
@@ -176,7 +176,7 @@ public final class SillyBatchBuilder<I, O> {
         }
         // allow no writer
         // if (writer.size() == 0) {
-        //     throw new IllegalStateException("You must assgin a writer");
+        //     throw new IllegalStateException("You must assign a writer");
         // }
         SillyBatch<I, O> batch = new SillyBatch<>();
         if (reader.size() == 1) {

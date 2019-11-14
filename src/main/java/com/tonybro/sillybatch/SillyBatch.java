@@ -12,10 +12,30 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Simple and fast batch framework, using producer/consumer model,
- * good at boosting job by doing things concurrently.
+ * good at boosting job by parallel processing tasks but doesn't
+ * support complex features such as job recover.
  *
- * <p>Three classic steps: Read -> Process -> Write, you can choose
- * handling records orderly or concurrently at every step.
+ * <p>This batch has three classic steps: Read -> Process -> Write,
+ * you can choose to handle records in order or in parallel at every
+ * step. When all steps are in parallel mode, the flow can be described
+ * as bellow (steps are concurrently executed by default) :
+ * <pre>
+ *             executor                             executor                              executor
+ *            ╭────────╮                          ╭───────────╮                          ╭────────╮
+ *            │ read() │                          │ process() │                          │ write()│
+ * ╭──────╮ / │  ···   │ \   queue    ╭───────╮ / │    ···    │ \   queue    ╭───────╮ / │  ···   │
+ * │source│ ─ │ read() │ ─ |=======|->│manager│ ─ │ process() │ ─ |=======|->│manager│ ─ │ write()│
+ * ╰──────╯ \ │  ···   │ /            ╰───────╯ \ │    ···    │ /            ╰───────╯ \ │  ···   │
+ *            │ read() │                          │ process() │                          │ write()│
+ *            ╰────────╯                          ╰───────────╯                          ╰────────╯
+ * </pre>
+ *
+ * <p>While using parallel mode, you have to ensure that handler
+ * ({@link RecordReader}, {@link RecordProcessor}, {@link RecordWriter})
+ * is thread safe, and be aware that if you don't provide executor,
+ * silly batch will create executors (fixed thread pool) for every step
+ * (means there are up to three executors, but you can assign same executor
+ * for multiple steps).
  *
  * <p>Using {@link SillyBatchBuilder} to build an instance.
  *
@@ -62,7 +82,7 @@ public class SillyBatch<I, O> {
     // report interval
     private long reportInterval = 2000;
 
-    // default pool size while creating executors(fixed thread pool)
+    // default pool size while creating executor(fixed thread pool)
     private int poolSize = Runtime.getRuntime().availableProcessors() * 2;
 
     /* --------------------- multi thread ---------------------- */
@@ -389,7 +409,7 @@ public class SillyBatch<I, O> {
         }
 
         try {
-            O out = processor.processRecord(record);
+            O out = processor.process(record);
             if (null == out) {
                 metrics.incrementFilterCount();
             } else {

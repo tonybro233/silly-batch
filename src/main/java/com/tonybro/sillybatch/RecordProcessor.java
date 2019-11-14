@@ -23,5 +23,5 @@ public interface RecordProcessor<I, O> {
      * @return the processed record, may be of another type of the input record, or null to skip
      * @throws Exception if an error occurs during record processing
      */
-    O processRecord(I record) throws Exception;
+    O process(I record) throws Exception;
 }
