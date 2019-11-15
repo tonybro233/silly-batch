@@ -54,7 +54,7 @@ public final class SillyBatchBuilder<I, O> {
         this.writeListener = new CompositeRecordWriteListener<>();
     }
 
-    private <K> SillyBatchBuilder(SillyBatchBuilder<I, K> builder, RecordProcessor<? super K, ? extends O> processor) {
+    private <K> SillyBatchBuilder(SillyBatchBuilder<I, K> builder, RecordProcessor<? super K, O> processor) {
         this.batchName = builder.batchName;
         this.reader = builder.reader;
         this.processor = builder.processor.addProcessor(processor);
@@ -98,7 +98,7 @@ public final class SillyBatchBuilder<I, O> {
         return this;
     }
 
-    public <K> SillyBatchBuilder<I, K> addProcessor(RecordProcessor<? super O, ? extends K> processor) {
+    public <K> SillyBatchBuilder<I, K> addProcessor(RecordProcessor<? super O, K> processor) {
         if (this.writer.size() > 0) {
             throw new IllegalStateException("Cannot add processor after writer has been set!");
         }

@@ -23,7 +23,7 @@ public class CompositeRecordProcessor <I, O> implements RecordProcessor<I, O> {
     }
 
     @SuppressWarnings("unchecked")
-    public <K> CompositeRecordProcessor<I, K> addProcessor(RecordProcessor<? super O, ? extends K> processor) {
+    public <K> CompositeRecordProcessor<I, K> addProcessor(RecordProcessor<? super O, K> processor) {
         this.processors.add(processor);
         return (CompositeRecordProcessor<I, K>) this;
     }
