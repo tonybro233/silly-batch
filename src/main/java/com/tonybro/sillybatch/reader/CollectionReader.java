@@ -1,4 +1,4 @@
-package com.tonybro.sillybatch;
+package com.tonybro.sillybatch.reader;
 
 import java.util.Collection;
 import java.util.Iterator;

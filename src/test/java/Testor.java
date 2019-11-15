@@ -1,10 +1,9 @@
-import com.tonybro.sillybatch.RecordProcessor;
-import com.tonybro.sillybatch.RecordReader;
-import com.tonybro.sillybatch.RecordWriter;
-import com.tonybro.sillybatch.SillyBatchBuilder;
+import com.tonybro.sillybatch.processor.RecordProcessor;
+import com.tonybro.sillybatch.reader.RecordReader;
+import com.tonybro.sillybatch.writer.RecordWriter;
+import com.tonybro.sillybatch.job.SillyBatchBuilder;
 import org.slf4j.Logger;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 

@@ -1,5 +1,12 @@
-package com.tonybro.sillybatch;
+package com.tonybro.sillybatch.job;
 
+import com.tonybro.sillybatch.listener.RecordProcessListener;
+import com.tonybro.sillybatch.listener.RecordReadListener;
+import com.tonybro.sillybatch.listener.RecordWriteListener;
+import com.tonybro.sillybatch.processor.RecordProcessor;
+import com.tonybro.sillybatch.reader.RecordReader;
+import com.tonybro.sillybatch.util.BasicThreadFactory;
+import com.tonybro.sillybatch.writer.RecordWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,8 +17,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Simple and fast batch framework, using producer/consumer model,
- * good at boosting job by parallel processing tasks but doesn't
+ * Simple and fast batch job, using producer/consumer model,
+ * good at boosting work by parallel processing tasks but doesn't
  * support complex features such as job recover.
  *
  * <p>This batch has three classic steps: Read -> Process -> Write,
@@ -42,9 +49,9 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * @author tony
  */
-public class SillyBatch<I, O> {
+public class SillyBatchJob<I, O> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(SillyBatch.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SillyBatchJob.class);
 
     /* ------------------------- param -------------------------- */
 

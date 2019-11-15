@@ -1,4 +1,6 @@
-package com.tonybro.sillybatch;
+package com.tonybro.sillybatch.listener;
+
+import com.tonybro.sillybatch.writer.RecordWriter;
 
 import java.util.List;
 

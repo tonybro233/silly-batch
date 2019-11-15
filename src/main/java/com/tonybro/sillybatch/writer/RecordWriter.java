@@ -1,4 +1,4 @@
-package com.tonybro.sillybatch;
+package com.tonybro.sillybatch.writer;
 
 import java.util.List;
 

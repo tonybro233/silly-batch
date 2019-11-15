@@ -1,4 +1,4 @@
-package com.tonybro.sillybatch;
+package com.tonybro.sillybatch.processor;
 
 import java.util.ArrayList;
 import java.util.List;

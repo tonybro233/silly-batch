@@ -1,4 +1,4 @@
-package com.tonybro.sillybatch;
+package com.tonybro.sillybatch.processor;
 
 public interface RecordProcessor<I, O> {
 

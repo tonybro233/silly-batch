@@ -1,4 +1,12 @@
-package com.tonybro.sillybatch;
+package com.tonybro.sillybatch.job;
+
+import com.tonybro.sillybatch.listener.*;
+import com.tonybro.sillybatch.processor.CompositeRecordProcessor;
+import com.tonybro.sillybatch.processor.RecordProcessor;
+import com.tonybro.sillybatch.reader.CompositeRecordReader;
+import com.tonybro.sillybatch.reader.RecordReader;
+import com.tonybro.sillybatch.writer.CompositeRecordWriter;
+import com.tonybro.sillybatch.writer.RecordWriter;
 
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
@@ -203,7 +211,7 @@ public final class SillyBatchBuilder<I, O> {
         return this;
     }
 
-    public SillyBatch<I, O> build() {
+    public SillyBatchJob<I, O> build() {
         if (reader.size() == 0) {
             throw new IllegalStateException("You must assign a reader");
         }
@@ -211,7 +219,7 @@ public final class SillyBatchBuilder<I, O> {
         // if (writer.size() == 0) {
         //     throw new IllegalStateException("You must assign a writer");
         // }
-        SillyBatch<I, O> batch = new SillyBatch<>();
+        SillyBatchJob<I, O> batch = new SillyBatchJob<>();
         if (reader.size() == 1) {
             batch.setReader(reader.getReader(0));
         } else {

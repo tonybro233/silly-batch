@@ -1,4 +1,6 @@
-package com.tonybro.sillybatch;
+package com.tonybro.sillybatch.listener;
+
+import com.tonybro.sillybatch.processor.RecordProcessor;
 
 public interface RecordProcessListener<I, O> {
 
