@@ -1,6 +1,5 @@
 package com.tonybro.sillybatch;
 
-import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -189,7 +188,7 @@ public class SillyBatch<I, O> {
                 writeManager.join();
             }
         } catch (InterruptedException ignore) {
-            // interrupter will LOGGER the exception
+            // interrupter will log the exception
             aborted.set(true);
             return 1;
         } catch (Exception e) {

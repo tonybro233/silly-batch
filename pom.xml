@@ -15,7 +15,6 @@
 
         <slf4j.version>1.7.29</slf4j.version>
         <logback.version>1.2.3</logback.version>
-        <commons-lang3.version>3.9</commons-lang3.version>
         <junit.version>4.12</junit.version>
     </properties>
 
@@ -32,13 +31,6 @@
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
-        </dependency>
-
-        <!-- commons -->
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
-            <version>${commons-lang3.version}</version>
         </dependency>
 
         <!--test-->
