@@ -19,12 +19,13 @@ import java.util.concurrent.atomic.AtomicLong;
  * you can choose to handle records in order or in parallel at every
  * step. When all steps are in parallel mode, the flow can be described
  * as bellow (steps are concurrently executed by default) :
+ *
  * <pre>
  *             executor                             executor                              executor
  *            ╭────────╮                          ╭───────────╮                          ╭────────╮
  *            │ read() │                          │ process() │                          │ write()│
  * ╭──────╮ / │  ···   │ \   queue    ╭───────╮ / │    ···    │ \   queue    ╭───────╮ / │  ···   │
- * │source│ ─ │ read() │ ─ |=======|->│manager│ ─ │ process() │ ─ |=======|->│manager│ ─ │ write()│
+ * │source│ ─ │ read() │ ─ │=======│->│manager│ ─ │ process() │ ─ │=======│->│manager│ ─ │ write()│
  * ╰──────╯ \ │  ···   │ /            ╰───────╯ \ │    ···    │ /            ╰───────╯ \ │  ···   │
  *            │ read() │                          │ process() │                          │ write()│
  *            ╰────────╯                          ╰───────────╯                          ╰────────╯
@@ -32,10 +33,11 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>While using parallel mode, you have to ensure that handler
  * ({@link RecordReader}, {@link RecordProcessor}, {@link RecordWriter})
- * is thread safe, and be aware that if you don't provide executor,
- * silly batch will create executors (fixed thread pool) for every step
- * (means there are up to three executors, but you can assign same executor
- * for multiple steps).
+ * and listener ({@link RecordReadListener}, {@link RecordProcessListener},
+ * {@link RecordWriteListener}) is thread safe, and be aware that
+ * if you don't provide executor, silly batch will create executors
+ * (fixed thread pool) for every step (means there are up to three
+ * executors, but you can assign same executor for multiple steps).
  *
  * <p>Using {@link SillyBatchBuilder} to build an instance.
  *
@@ -45,18 +47,9 @@ public class SillyBatch<I, O> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SillyBatch.class);
 
+    /* ------------------------- param -------------------------- */
 
     private String name = "silly batch";
-
-    /* ------------------------- core -------------------------- */
-
-    private RecordReader<I> reader;
-
-    private RecordProcessor<I, O> processor;
-
-    private RecordWriter<O> writer;
-
-    /* ------------------------- param -------------------------- */
 
     // read record concurrently
     private boolean parallelRead = false;
@@ -84,6 +77,22 @@ public class SillyBatch<I, O> {
 
     // default pool size while creating executor(fixed thread pool)
     private int poolSize = Runtime.getRuntime().availableProcessors() * 2;
+
+    /* ------------------------- core -------------------------- */
+
+    private RecordReader<? extends I> reader;
+
+    private RecordProcessor<? super I, ? extends O> processor;
+
+    private RecordWriter<? super O> writer;
+
+    /* ----------------------- listener ------------------------ */
+
+    private RecordReadListener<? super I> readListener;
+
+    private RecordProcessListener<? super I, ? super O> processListener;
+
+    private RecordWriteListener<? super O> writeListener;
 
     /* --------------------- multi thread ---------------------- */
 
@@ -370,27 +379,32 @@ public class SillyBatch<I, O> {
         }
     }
 
-    private Collection<I> doRead() {
+    private List<? extends I> doRead() {
         if (aborted.get()) {
             throw new BatchAbortedException();
         }
         try {
-            Collection<I> records = null;
+            if (null != readListener) { readListener.beforeRead(); }
+            List<? extends I> records = null;
             if (readChunk) {
                 records = reader.readChunk(chunkSize);
                 if (null != records) {
+                    if (null != readListener) { readListener.afterRead(records); }
                     metrics.addReadCount(records.size());
                 }
             } else {
                 I record = reader.read();
                 if (null != record) {
+                    if (null != readListener) { readListener.afterRead(record); }
                     metrics.incrementReadCount();
                     records = Collections.singletonList(record);
                 }
             }
+
             return records;
         } catch (Exception e) {
             if (!forceClean) {
+                onReadError(e);
                 LOGGER.error("Error reading records", e);
                 metrics.addErrorCount(readChunk ? chunkSize : 1);
                 if (metrics.getErrorCount() > failover) {
@@ -409,7 +423,9 @@ public class SillyBatch<I, O> {
         }
 
         try {
+            if (null != processListener) { processListener.beforeProcess(record); }
             O out = processor.process(record);
+            if (null != processListener) { processListener.afterProcess(record, out); }
             if (null == out) {
                 metrics.incrementFilterCount();
             } else {
@@ -418,6 +434,7 @@ public class SillyBatch<I, O> {
             }
         } catch (Exception e) {
             if (!forceClean) {
+                onProcessError(e, record);
                 LOGGER.error("Exception in processing record", e);
                 metrics.incrementErrorCount();
                 if (metrics.getErrorCount() > failover) {
@@ -435,10 +452,13 @@ public class SillyBatch<I, O> {
         }
 
         try {
+            if (null != writeListener) { writeListener.beforeWrite(records); }
             writer.write(records);
+            if (null != writeListener) { writeListener.afterWrite(records); }
             metrics.addWriteCount(records.size());
         } catch (Exception e) {
             if (!forceClean) {
+                onWriteError(e, records);
                 LOGGER.error("Exception in writing records", e);
                 metrics.addErrorCount(records.size());
                 if (metrics.getErrorCount() > failover) {
@@ -466,6 +486,36 @@ public class SillyBatch<I, O> {
         }
     }
 
+    private void onReadError(Exception e) {
+        try {
+            if (null != readListener) {
+                readListener.onReadError(e);
+            }
+        } catch (Exception ex) {
+            LOGGER.error("Read listener error.", ex);
+        }
+    }
+
+    private void onProcessError(Exception e, I record) {
+        try {
+            if (null != processListener) {
+                processListener.onProcessError(e, record);
+            }
+        } catch (Exception ex) {
+            LOGGER.error("Process listener error.", ex);
+        }
+    }
+
+    private void onWriteError(Exception e, List<O> records) {
+        try {
+            if (null != writeListener) {
+                writeListener.onWriteError(e, records);
+            }
+        } catch (Exception ex) {
+            LOGGER.error("Read listener error.", ex);
+        }
+    }
+
     private void waitForJobs(Queue<Future<?>> queue) throws InterruptedException {
         if (null != queue) {
             Future<?> future;
@@ -489,18 +539,18 @@ public class SillyBatch<I, O> {
     }
 
     private static class FailOverExceededException extends RuntimeException {
-        public FailOverExceededException() {
+        FailOverExceededException() {
             super("Exceed failover, abort execution.");
         }
     }
 
     private static class BatchAbortedException extends RuntimeException {
-        public BatchAbortedException() {
+        BatchAbortedException() {
             super("Batch has been aborted.");
         }
     }
 
-    /* ------------------------- thread & callable ------------------------- */
+    /* ------------------------- thread & runnable ------------------------- */
 
     private final class BatchReporter extends Thread {
 
@@ -550,7 +600,7 @@ public class SillyBatch<I, O> {
                         if (aborted.get()) {
                             return;
                         }
-                        Collection<I> records = doRead();
+                        List<? extends I> records = doRead();
                         if (null != records) {
                             for (I record : records) {
                                 readQueue.offer(record);
@@ -730,7 +780,7 @@ public class SillyBatch<I, O> {
                 return;
             }
             try {
-                Collection<I> records = doRead();
+                List<? extends I> records = doRead();
                 if (null != records) {
                     for (I record : records) {
                         readQueue.offer(record);
@@ -894,19 +944,31 @@ public class SillyBatch<I, O> {
         this.name = name;
     }
 
-    public void setReader(RecordReader<I> reader) {
+    public void setReader(RecordReader<? extends I> reader) {
         throwExceptionIfStarted();
         this.reader = reader;
     }
 
-    public void setWriter(RecordWriter<O> writer) {
+    public void setProcessor(RecordProcessor<? super I, ? extends O> processor) {
+        throwExceptionIfStarted();
+        this.processor = processor;
+    }
+
+    public void setWriter(RecordWriter<? super O> writer) {
         throwExceptionIfStarted();
         this.writer = writer;
     }
 
-    public void setProcessor(RecordProcessor<I, O> processor) {
-        throwExceptionIfStarted();
-        this.processor = processor;
+    public void setListener(RecordReadListener<? super I> listener) {
+        this.readListener = listener;
+    }
+
+    public void setListener(RecordProcessListener<? super I, ? super O> listener) {
+        this.processListener = listener;
+    }
+
+    public void setListener(RecordWriteListener<? super O> listener) {
+        this.writeListener = listener;
     }
 
     public void setParallelRead(boolean parallelRead) {

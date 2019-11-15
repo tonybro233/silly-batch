@@ -1,30 +1,28 @@
 package com.tonybro.sillybatch;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
 public class CompositeRecordReader<T> implements RecordReader<T> {
 
-    private List<RecordReader<T>> readers;
+    private List<RecordReader<? extends T>> readers = new ArrayList<>();
 
     private volatile int currentIdx;
 
-    private boolean strict = false;
+    private boolean strict = true;
 
     public CompositeRecordReader() {
-        this(new ArrayList<>());
     }
 
-    public CompositeRecordReader(List<RecordReader<T>> readers) {
-        this.readers = readers;
+    public CompositeRecordReader(List<? extends RecordReader<? extends T>> readers) {
+        this.readers.addAll(readers);
     }
 
-    public void addReader(RecordReader<T> reader) {
+    public void addReader(RecordReader<? extends T> reader) {
         readers.add(reader);
     }
 
-    public RecordReader<T> getReader(int idx) {
+    public RecordReader<? extends T> getReader(int idx) {
         return readers.get(idx);
     }
 
@@ -109,7 +107,7 @@ public class CompositeRecordReader<T> implements RecordReader<T> {
     }
 
     @Override
-    public Collection<T> readChunk(int size) throws Exception {
+    public List<T> readChunk(int size) throws Exception {
         if (currentIdx >= readers.size()) {
             return null;
         }
@@ -117,9 +115,9 @@ public class CompositeRecordReader<T> implements RecordReader<T> {
         int idx = currentIdx;
         try {
             while (buffer.size() < size) {
-                RecordReader<T> reader = readers.get(idx);
+                RecordReader<? extends T> reader = readers.get(idx);
                 if (reader.supportReadChunk()) {
-                    Collection<T> chunk = reader.readChunk(size - buffer.size());
+                    List<? extends T> chunk = reader.readChunk(size - buffer.size());
                     if (null == chunk) {
                         idx++;
                         if (idx >= readers.size()) {

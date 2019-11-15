@@ -9,9 +9,15 @@ public final class SillyBatchBuilder<I, O> {
 
     private CompositeRecordReader<I> reader;
 
+    private CompositeRecordProcessor<I, O> processor;
+
     private CompositeRecordWriter<O> writer;
 
-    private CompositeRecordProcessor<I, O> processor;
+    private CompositeRecordReadListener<I> readListener;
+
+    private CompositeRecordProcessListener<I, O> processListener;
+
+    private CompositeRecordWriteListener<O> writeListener;
 
     private Boolean parallelRead;
 
@@ -41,15 +47,21 @@ public final class SillyBatchBuilder<I, O> {
     private SillyBatchBuilder(String batchName) {
         this.batchName = batchName;
         this.reader = new CompositeRecordReader<>();
-        this.writer = new CompositeRecordWriter<>();
         this.processor = new CompositeRecordProcessor<>();
+        this.writer = new CompositeRecordWriter<>();
+        this.readListener = new CompositeRecordReadListener<>();
+        this.processListener = new CompositeRecordProcessListener<>();
+        this.writeListener = new CompositeRecordWriteListener<>();
     }
 
-    private <K> SillyBatchBuilder(SillyBatchBuilder<I, K> builder, RecordProcessor<K, O> processor) {
+    private <K> SillyBatchBuilder(SillyBatchBuilder<I, K> builder, RecordProcessor<? super K, ? extends O> processor) {
         this.batchName = builder.batchName;
         this.reader = builder.reader;
         this.processor = builder.processor.addProcessor(processor);
         this.writer = new CompositeRecordWriter<>();
+        this.readListener = builder.readListener;
+        this.processListener = new CompositeRecordProcessListener<>();
+        this.writeListener = new CompositeRecordWriteListener<>();
         this.parallelRead = builder.parallelRead;
         this.parallelProcess = builder.parallelProcess;
         this.parallelWrite = builder.parallelWrite;
@@ -81,21 +93,42 @@ public final class SillyBatchBuilder<I, O> {
         return this;
     }
 
-    public SillyBatchBuilder<I, O> addReader(RecordReader<I> reader) {
+    public SillyBatchBuilder<I, O> addReader(RecordReader<? extends I> reader) {
         this.reader.addReader(reader);
         return this;
     }
 
-    public SillyBatchBuilder<I, O> addWriter(RecordWriter<O> writer) {
+    public <K> SillyBatchBuilder<I, K> addProcessor(RecordProcessor<? super O, ? extends K> processor) {
+        if (this.writer.size() > 0) {
+            throw new IllegalStateException("Cannot add processor after writer has been set!");
+        }
+        if (this.processListener.size() > 0) {
+            throw new IllegalStateException("Cannot add processor after process listener has been set!");
+        }
+        if (this.writeListener.size() > 0) {
+            throw new IllegalStateException("Cannot add processor after writer listener has been set!");
+        }
+        return new SillyBatchBuilder<>(this, processor);
+    }
+
+    public SillyBatchBuilder<I, O> addWriter(RecordWriter<? super O> writer) {
         this.writer.addWriter(writer);
         return this;
     }
 
-    public <K> SillyBatchBuilder<I, K> addProcessor(RecordProcessor<O, K> processor) {
-        if (this.writer.size() > 0) {
-            throw new IllegalStateException("Cannot add processor as writer has been set!");
-        }
-        return new SillyBatchBuilder<>(this, processor);
+    public SillyBatchBuilder<I, O> addListener(RecordReadListener<? super I> listener) {
+        this.readListener.addListener(listener);
+        return this;
+    }
+
+    public SillyBatchBuilder<I, O> addListener(RecordProcessListener<? super I, ? super O> listener) {
+        this.processListener.addListener(listener);
+        return this;
+    }
+
+    public SillyBatchBuilder<I, O> addListener(RecordWriteListener<? super O> listener) {
+        this.writeListener.addListener(listener);
+        return this;
     }
 
     public SillyBatchBuilder<I, O> parallelRead(Boolean parallelRead) {
@@ -189,6 +222,15 @@ public final class SillyBatchBuilder<I, O> {
             batch.setWriter(writer.getWriter(0));
         } else {
             batch.setWriter(writer);
+        }
+        if (readListener.size() > 0) {
+            batch.setListener(readListener);
+        }
+        if (processListener.size() > 0) {
+            batch.setListener(processListener);
+        }
+        if (writeListener.size() > 0) {
+            batch.setListener(writeListener);
         }
         Optional.ofNullable(batchName).ifPresent(batch::setName);
         Optional.ofNullable(parallelRead).ifPresent(batch::setParallelRead);

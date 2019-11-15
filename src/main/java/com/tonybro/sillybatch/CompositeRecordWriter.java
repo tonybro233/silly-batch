@@ -1,26 +1,24 @@
 package com.tonybro.sillybatch;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
 public class CompositeRecordWriter <T> implements RecordWriter<T> {
 
-    private List<RecordWriter<T>> writers;
+    private List<RecordWriter<? super T>> writers = new ArrayList<>();
 
     public CompositeRecordWriter() {
-        this(new ArrayList<>());
     }
 
-    public CompositeRecordWriter(List<RecordWriter<T>> writers) {
-        this.writers = writers;
+    public CompositeRecordWriter(List<? extends RecordWriter<? super T>> writers) {
+        this.writers.addAll(writers);
     }
 
-    public void addWriter(RecordWriter<T> writer) {
+    public void addWriter(RecordWriter<? super T> writer) {
         writers.add(writer);
     }
 
-    public RecordWriter<T> getWriter(int idx) {
+    public RecordWriter<? super T> getWriter(int idx) {
         return writers.get(idx);
     }
 
@@ -43,15 +41,8 @@ public class CompositeRecordWriter <T> implements RecordWriter<T> {
     }
 
     @Override
-    public void write(T record) throws Exception {
-        for (RecordWriter<T> writer : writers) {
-            writer.write(record);
-        }
-    }
-
-    @Override
-    public void write(Collection<T> records) throws Exception {
-        for (RecordWriter<T> writer : writers) {
+    public void write(List<? extends T> records) throws Exception {
+        for (RecordWriter<? super T> writer : writers) {
             writer.write(records);
         }
     }

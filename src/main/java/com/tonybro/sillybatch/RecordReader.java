@@ -1,6 +1,6 @@
 package com.tonybro.sillybatch;
 
-import java.util.Collection;
+import java.util.List;
 
 public interface RecordReader<T> {
 
@@ -37,20 +37,21 @@ public interface RecordReader<T> {
     }
 
     /**
-     * whether reader support reading chunk of records
+     * Whether reader support reading chunk of records
      */
     default boolean supportReadChunk() {
         return false;
     }
 
     /**
-     * read next chunk of records from the data source
+     * Read next chunk of records from the data source.
+     * Don't forget to override {@link RecordReader#supportReadChunk()}
      *
      * @param size chunk size
      * @return the next chunk of record from the data source or null if the end of the data source is reached
      * @throws Exception if an error occurs during reading
      */
-    default Collection<T> readChunk(int size) throws Exception {
+    default List<T> readChunk(int size) throws Exception {
         throw new UnsupportedOperationException();
     }
 

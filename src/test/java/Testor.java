@@ -5,6 +5,7 @@ import com.tonybro.sillybatch.SillyBatchBuilder;
 import org.slf4j.Logger;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Testor {
@@ -62,13 +63,9 @@ public class Testor {
 
 
     public static class TestWriter implements RecordWriter<Integer> {
-        @Override
-        public void write(Integer record) throws Exception {
-            log.info("Write Single :" + record);
-        }
 
         @Override
-        public void write(Collection<Integer> records) throws Exception {
+        public void write(List<? extends Integer> records) throws Exception {
             // if (records.size() < 5) {
             //     throw new RuntimeException("Haha, shitter! size:" + records.size());
             // }

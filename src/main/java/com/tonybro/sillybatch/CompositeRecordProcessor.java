@@ -5,10 +5,9 @@ import java.util.List;
 
 public class CompositeRecordProcessor <I, O> implements RecordProcessor<I, O> {
 
-    private List<RecordProcessor<?, ?>> processors;
+    private List<RecordProcessor<?, ?>> processors = new ArrayList<>();
 
     public CompositeRecordProcessor() {
-        this(new ArrayList<>());
     }
 
     public CompositeRecordProcessor(List<RecordProcessor<?, ?>> processors) {
@@ -16,7 +15,6 @@ public class CompositeRecordProcessor <I, O> implements RecordProcessor<I, O> {
     }
 
     public CompositeRecordProcessor(RecordProcessor<I, O> processor) {
-        this.processors = new ArrayList<>();
         processors.add(processor);
     }
 
@@ -25,7 +23,7 @@ public class CompositeRecordProcessor <I, O> implements RecordProcessor<I, O> {
     }
 
     @SuppressWarnings("unchecked")
-    public <K> CompositeRecordProcessor<I, K> addProcessor(RecordProcessor<O, K> processor) {
+    public <K> CompositeRecordProcessor<I, K> addProcessor(RecordProcessor<? super O, ? extends K> processor) {
         this.processors.add(processor);
         return (CompositeRecordProcessor<I, K>) this;
     }
