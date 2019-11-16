@@ -211,7 +211,7 @@ public final class SillyBatchBuilder<I, O> {
         return this;
     }
 
-    public SillyBatchJob<I, O> build() {
+    public SillyBatch<I, O> build() {
         if (reader.size() == 0) {
             throw new IllegalStateException("You must assign a reader");
         }
@@ -219,7 +219,7 @@ public final class SillyBatchBuilder<I, O> {
         // if (writer.size() == 0) {
         //     throw new IllegalStateException("You must assign a writer");
         // }
-        SillyBatchJob<I, O> batch = new SillyBatchJob<>();
+        SillyBatch<I, O> batch = new SillyBatch<>();
         if (reader.size() == 1) {
             batch.setReader(reader.getReader(0));
         } else {

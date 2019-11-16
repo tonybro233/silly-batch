@@ -49,9 +49,9 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * @author tony
  */
-public class SillyBatchJob<I, O> {
+public class SillyBatch<I, O> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(SillyBatchJob.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SillyBatch.class);
 
     /* ------------------------- param -------------------------- */
 
