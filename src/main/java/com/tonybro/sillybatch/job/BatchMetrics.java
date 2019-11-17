@@ -6,6 +6,9 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Metrics of batch job.
+ */
 public class BatchMetrics implements Serializable {
 
     private volatile LocalDateTime startTime;
@@ -98,7 +101,7 @@ public class BatchMetrics implements Serializable {
     }
 
     public void addProcessCount(long delta) {
-        writeCount.addAndGet(delta);
+        processCount.addAndGet(delta);
     }
 
     public void addFilterCount(long delta) {
