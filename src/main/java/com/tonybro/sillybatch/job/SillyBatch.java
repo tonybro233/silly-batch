@@ -212,8 +212,8 @@ public class SillyBatch<I, O> {
 
     private void prepare() throws Exception {
         throwExceptionIfStarted();
-        LOGGER.info("Prepare executing {} !\nparallelRead={}, parallelProcess={}, parallelWrite={}, \n"
-                        + "forceOrder={}, chunk={}, failover={}, default-poolSize={}",
+        LOGGER.info("Prepare executing {} !\n\tparallelRead={}, \n\tparallelProcess={}, \n\tparallelWrite={},"
+                        + "\n\tforceOrder={}, \n\tchunk={}, \n\tfailover={}, \n\tdefault-poolSize={}",
                 name, parallelRead, parallelProcess, parallelWrite,
                 forceOrder, chunkSize, failover, poolSize);
 
