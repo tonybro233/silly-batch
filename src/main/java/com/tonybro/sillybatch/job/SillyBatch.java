@@ -410,8 +410,8 @@ public class SillyBatch<I, O> {
             return records;
         } catch (Exception e) {
             if (!forceClean) {
-                onReadError(e);
                 LOGGER.error("Error reading records", e);
+                onReadError(e);
                 metrics.addErrorCount(readChunk ? chunkSize : 1);
                 if (metrics.getErrorCount() > failover) {
                     throw new FailOverExceededException();
@@ -440,8 +440,8 @@ public class SillyBatch<I, O> {
             }
         } catch (Exception e) {
             if (!forceClean) {
-                onProcessError(e, record);
                 LOGGER.error("Exception in processing record", e);
+                onProcessError(e, record);
                 metrics.incrementErrorCount();
                 if (metrics.getErrorCount() > failover) {
                     throw new FailOverExceededException();
@@ -464,8 +464,8 @@ public class SillyBatch<I, O> {
             metrics.addWriteCount(records.size());
         } catch (Exception e) {
             if (!forceClean) {
-                onWriteError(e, records);
                 LOGGER.error("Exception in writing records", e);
+                onWriteError(e, records);
                 metrics.addErrorCount(records.size());
                 if (metrics.getErrorCount() > failover) {
                     throw new FailOverExceededException();
