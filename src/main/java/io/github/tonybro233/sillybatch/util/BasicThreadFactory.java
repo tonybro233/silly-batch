@@ -1,4 +1,4 @@
-package com.tonybro.sillybatch.util;
+package io.github.tonybro233.sillybatch.util;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;

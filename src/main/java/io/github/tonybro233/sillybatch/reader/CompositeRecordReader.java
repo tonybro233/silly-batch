@@ -1,4 +1,4 @@
-package com.tonybro.sillybatch.reader;
+package io.github.tonybro233.sillybatch.reader;
 
 import java.util.ArrayList;
 import java.util.List;

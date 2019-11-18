@@ -1,12 +1,12 @@
-package com.tonybro.sillybatch.job;
+package io.github.tonybro233.sillybatch.job;
 
-import com.tonybro.sillybatch.listener.RecordProcessListener;
-import com.tonybro.sillybatch.listener.RecordReadListener;
-import com.tonybro.sillybatch.listener.RecordWriteListener;
-import com.tonybro.sillybatch.processor.RecordProcessor;
-import com.tonybro.sillybatch.reader.RecordReader;
-import com.tonybro.sillybatch.util.BasicThreadFactory;
-import com.tonybro.sillybatch.writer.RecordWriter;
+import io.github.tonybro233.sillybatch.listener.RecordProcessListener;
+import io.github.tonybro233.sillybatch.listener.RecordReadListener;
+import io.github.tonybro233.sillybatch.listener.RecordWriteListener;
+import io.github.tonybro233.sillybatch.processor.RecordProcessor;
+import io.github.tonybro233.sillybatch.reader.RecordReader;
+import io.github.tonybro233.sillybatch.util.BasicThreadFactory;
+import io.github.tonybro233.sillybatch.writer.RecordWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

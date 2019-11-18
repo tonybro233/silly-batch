@@ -1,8 +1,8 @@
-import com.tonybro.sillybatch.job.SillyBatchBuilder;
-import com.tonybro.sillybatch.listener.RecordReadListener;
-import com.tonybro.sillybatch.processor.RecordProcessor;
-import com.tonybro.sillybatch.reader.RecordReader;
-import com.tonybro.sillybatch.util.PriorityThreadPoolExecutor;
+import io.github.tonybro233.sillybatch.job.SillyBatchBuilder;
+import io.github.tonybro233.sillybatch.listener.RecordReadListener;
+import io.github.tonybro233.sillybatch.processor.RecordProcessor;
+import io.github.tonybro233.sillybatch.reader.RecordReader;
+import io.github.tonybro233.sillybatch.util.PriorityThreadPoolExecutor;
 
 import java.time.Duration;
 import java.time.LocalDateTime;

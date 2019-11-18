@@ -1,6 +1,6 @@
-package com.tonybro.sillybatch.listener;
+package io.github.tonybro233.sillybatch.listener;
 
-import com.tonybro.sillybatch.writer.RecordWriter;
+import io.github.tonybro233.sillybatch.writer.RecordWriter;
 
 import java.util.List;
 

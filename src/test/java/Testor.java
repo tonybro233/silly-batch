@@ -1,7 +1,7 @@
-import com.tonybro.sillybatch.processor.RecordProcessor;
-import com.tonybro.sillybatch.reader.RecordReader;
-import com.tonybro.sillybatch.writer.RecordWriter;
-import com.tonybro.sillybatch.job.SillyBatchBuilder;
+import io.github.tonybro233.sillybatch.processor.RecordProcessor;
+import io.github.tonybro233.sillybatch.reader.RecordReader;
+import io.github.tonybro233.sillybatch.writer.RecordWriter;
+import io.github.tonybro233.sillybatch.job.SillyBatchBuilder;
 import org.slf4j.Logger;
 
 import java.util.List;

@@ -1,6 +1,6 @@
-package com.tonybro.sillybatch.listener;
+package io.github.tonybro233.sillybatch.listener;
 
-import com.tonybro.sillybatch.processor.RecordProcessor;
+import io.github.tonybro233.sillybatch.processor.RecordProcessor;
 
 public interface RecordProcessListener<I, O> {
 

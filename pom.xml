@@ -4,9 +4,36 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.tonybro</groupId>
+    <parent>
+        <groupId>org.sonatype.oss</groupId>
+        <artifactId>oss-parent</artifactId>
+        <version>9</version>
+    </parent>
+
+    <groupId>io.github.tonybro233</groupId>
     <artifactId>sillybatch</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>${project.version}</version>
+
+    <scm>
+        <url>git@github.com:tonybro233/silly-batch.git</url>
+        <connection>scm:git:git@github.com:tonybro233/silly-batch.git</connection>
+        <developerConnection>scm:git:git@github.com:tonybro233/silly-batch.git</developerConnection>
+        <tag>HEAD</tag>
+    </scm>
+
+    <developers>
+        <developer>
+            <name>tony</name>
+            <email>x2040052@126.com</email>
+        </developer>
+    </developers>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>http://opensource.org/licenses/mit-license.php</url>
+        </license>
+    </licenses>
 
     <properties>
         <encoding>UTF-8</encoding>
@@ -14,9 +41,19 @@
         <java.target>1.8</java.target>
 
         <slf4j.version>1.7.29</slf4j.version>
-        <logback.version>1.2.3</logback.version>
         <junit.version>4.12</junit.version>
+
+        <project.version>1.0-SNAPSHOT</project.version>
     </properties>
+
+    <profiles>
+        <profile>
+            <id>sonatype-oss-release</id>
+            <properties>
+                <project.version>1.0</project.version>
+            </properties>
+        </profile>
+    </profiles>
 
     <dependencies>
 
@@ -30,7 +67,7 @@
         <!--<dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>${logback.version}</version>
+            <version>1.2.3</version>
         </dependency>-->
 
         <!--test-->

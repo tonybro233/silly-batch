@@ -1,12 +1,12 @@
-package com.tonybro.sillybatch.job;
+package io.github.tonybro233.sillybatch.job;
 
-import com.tonybro.sillybatch.listener.*;
-import com.tonybro.sillybatch.processor.CompositeRecordProcessor;
-import com.tonybro.sillybatch.processor.RecordProcessor;
-import com.tonybro.sillybatch.reader.CompositeRecordReader;
-import com.tonybro.sillybatch.reader.RecordReader;
-import com.tonybro.sillybatch.writer.CompositeRecordWriter;
-import com.tonybro.sillybatch.writer.RecordWriter;
+import io.github.tonybro233.sillybatch.listener.*;
+import io.github.tonybro233.sillybatch.processor.CompositeRecordProcessor;
+import io.github.tonybro233.sillybatch.processor.RecordProcessor;
+import io.github.tonybro233.sillybatch.reader.CompositeRecordReader;
+import io.github.tonybro233.sillybatch.reader.RecordReader;
+import io.github.tonybro233.sillybatch.writer.CompositeRecordWriter;
+import io.github.tonybro233.sillybatch.writer.RecordWriter;
 
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
@@ -137,7 +137,7 @@ public final class SillyBatchBuilder<I, O> {
     /**
      * Add a record reader. You can add more than one reader.
      *
-     * @see com.tonybro.sillybatch.reader.CompositeRecordReader
+     * @see CompositeRecordReader
      */
     public SillyBatchBuilder<I, O> addReader(RecordReader<? extends I> reader) {
         this.reader.addReader(reader);
@@ -147,7 +147,7 @@ public final class SillyBatchBuilder<I, O> {
     /**
      * Add a record processor. You can add more than one processor.
      *
-     * @see com.tonybro.sillybatch.processor.CompositeRecordProcessor
+     * @see CompositeRecordProcessor
      */
     public <K> SillyBatchBuilder<I, K> addProcessor(RecordProcessor<? super O, K> processor) {
         if (this.writer.size() > 0) {
@@ -165,7 +165,7 @@ public final class SillyBatchBuilder<I, O> {
     /**
      * Add a record writer. You can add more than one writer.
      *
-     * @see com.tonybro.sillybatch.writer.CompositeRecordWriter
+     * @see CompositeRecordWriter
      */
     public SillyBatchBuilder<I, O> addWriter(RecordWriter<? super O> writer) {
         this.writer.addWriter(writer);
@@ -175,7 +175,7 @@ public final class SillyBatchBuilder<I, O> {
     /**
      * Add a record read listener. You can add more than one listener.
      *
-     * @see com.tonybro.sillybatch.listener.CompositeRecordReadListener
+     * @see CompositeRecordReadListener
      */
     public SillyBatchBuilder<I, O> addListener(RecordReadListener<? super I> listener) {
         this.readListener.addListener(listener);
@@ -185,7 +185,7 @@ public final class SillyBatchBuilder<I, O> {
     /**
      * Add a record process listener. You can add more than one listener.
      *
-     * @see com.tonybro.sillybatch.listener.CompositeRecordProcessListener
+     * @see CompositeRecordProcessListener
      */
     public SillyBatchBuilder<I, O> addListener(RecordProcessListener<? super I, ? super O> listener) {
         this.processListener.addListener(listener);
@@ -195,7 +195,7 @@ public final class SillyBatchBuilder<I, O> {
     /**
      * Add a record write listener. You can add more than one listener.
      *
-     * @see com.tonybro.sillybatch.listener.CompositeRecordWriteListener
+     * @see CompositeRecordWriteListener
      */
     public SillyBatchBuilder<I, O> addListener(RecordWriteListener<? super O> listener) {
         this.writeListener.addListener(listener);

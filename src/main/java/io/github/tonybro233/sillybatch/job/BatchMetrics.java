@@ -1,4 +1,4 @@
-package com.tonybro.sillybatch.job;
+package io.github.tonybro233.sillybatch.job;
 
 import java.io.Serializable;
 import java.time.Duration;
