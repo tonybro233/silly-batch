@@ -17,7 +17,8 @@ import java.util.concurrent.ExecutorService;
  *
  * <p>This Builder provided composite implementations of core
  * interfaces and listener interfaces, you can add same kind of
- * component more than once.
+ * component more than once. Notice that you should offer at
+ * least one reader, but processor and writer are not mandatory.
  *
  * @author tony
  */

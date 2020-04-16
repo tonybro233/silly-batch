@@ -22,9 +22,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * support complex features such as job recover.
  *
  * <p>This batch has three classic steps: Read -> Process -> Write,
- * you can choose to handle records in order or in parallel at every
- * step. When all steps are in parallel mode, the flow can be described
- * as bellow (steps are concurrently executed by default) :
+ * you can choose to handle records in order or in parallel inside every
+ * step(default is in order). When all steps are using parallel mode,
+ * the flow can be described as bellow (all steps are started at the same
+ * time by default) :
  *
  * <pre>
  *             executor                             executor                              executor
@@ -37,15 +38,15 @@ import java.util.concurrent.atomic.AtomicLong;
  *            ╰────────╯                          ╰───────────╯                          ╰────────╯
  * </pre>
  *
- * <p>While using parallel mode, you have to ensure that handler
+ * <p>While using parallel mode, you have to ensure that handlers
  * ({@link RecordReader}, {@link RecordProcessor}, {@link RecordWriter})
- * and listener ({@link RecordReadListener}, {@link RecordProcessListener},
- * {@link RecordWriteListener}) is thread safe, and be aware that
+ * and listeners ({@link RecordReadListener}, {@link RecordProcessListener},
+ * {@link RecordWriteListener}) are thread safe, and be aware that
  * if you don't provide executor, silly batch will create executors
  * (fixed thread pool) for every step (means there are up to three
- * executors, but you can assign same executor for multiple steps).
+ * executors, but you can also assign same executor for multiple steps).
  *
- * <p>Using {@link SillyBatchBuilder} to build an instance.
+ * <p>Using {@link SillyBatchBuilder} to build instances.
  *
  * @author tony
  */
