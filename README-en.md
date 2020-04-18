@@ -9,13 +9,13 @@ Available from Maven Central.
 <dependency>
     <groupId>io.github.tonybro233</groupId>
     <artifactId>sillybatch</artifactId>
-    <version>1.1</version>
+    <version>1.2</version>
 </dependency>
 ```
 
 ### Hot it works
 
-Silly Batch is build on the classical producer/consumer model, doing things concurrently and efficiently by using thread pool and blocking queue. Before start executing your job, you just have to implement `RecordReader`, `RecordProcessor`  and `RecordWriter` three interfaces then do some simple configuration. All three core steps are free to choose parallel or sequential execution. When using parallel mode you should guarantee the input sources or output targets support multi thread and the components are thread safe. Silly Batch will create three administrative threads to control each of steps, handle work(sequential mode) or submit job(parallel mode) and communicate with blocking queues. When all steps are using parallel mode, the whole procedure can be simply described as below: 
+Silly Batch is build on the classical producer/consumer model, doing things concurrently and efficiently by using thread pool and blocking queue. Before start executing your job, you just have to implement `RecordReader`, `RecordProcessor`  and `RecordWriter` three interfaces then do some simple configuration. All three core steps are free to choose parallel or sequential execution. When using parallel mode you should guarantee the input sources or output targets support multi thread and the components are thread safe. Silly Batch will create three administrative threads to control each steps, execute method(sequential mode) or submit job(parallel mode) and communicate with blocking queues. When all steps are using parallel mode, the whole procedure can be simply described as below: 
 
 ```
             executor                             executor                              executor
@@ -140,7 +140,7 @@ public class MeaningLessExample {
 
 ### Notes
 
-- Using SLF4J logging api，import log implementation when using this tool.
+- Using SLF4J logging api，easy to integrate with log implementation.
 - The way to achieve parallel reads is to submit self-submit reading job to the thread pool, the initial number of job is thread pool's size.
 - For each steps, Silly Batch will create thread pool when using parallel mode, it means that there are up to three default thread pools. Of course you can provide external thread pools, even specify one thread pool for three steps. But note that Silly Batch will always trying to submit a lot of jobs to the thread pool, when using single thread pool, if the speed of reading is much more faster than others, lots of processing jobs will be submitted at once, that cause the writing jobs ranked at the tail of the thread pool's  job queue, middle data will be stacked in queue for a long time. If it is a problem, consider using `PriorityThreadPoolExecutor` with `PriorityBlockingQueue`. 
 - Parallelism means sacrificing order, Silly Batch can also handle data in order(by default)，and support using `forceOrder` option to force doing processing after read over, doing writing after process over.
