@@ -286,9 +286,6 @@ public final class SillyBatchBuilder<I, O> {
     /**
      * Make reader and writer handle records in chunks (if supported).
      * The default value is 1.
-     *
-     * @param chunkSize size of chunk
-     * @return
      */
     public SillyBatchBuilder<I, O> chunkSize(int chunkSize) {
         this.chunkSize = chunkSize;
