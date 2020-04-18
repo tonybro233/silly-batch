@@ -3,6 +3,7 @@ package io.github.tonybro233.sillybatch.job;
 import io.github.tonybro233.sillybatch.listener.RecordProcessListener;
 import io.github.tonybro233.sillybatch.listener.RecordReadListener;
 import io.github.tonybro233.sillybatch.listener.RecordWriteListener;
+import io.github.tonybro233.sillybatch.log.ConsoleLogger;
 import io.github.tonybro233.sillybatch.processor.RecordProcessor;
 import io.github.tonybro233.sillybatch.reader.RecordReader;
 import io.github.tonybro233.sillybatch.util.BasicThreadFactory;
@@ -52,11 +53,21 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class SillyBatch<I, O> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(SillyBatch.class);
+    private static final Logger LOGGER;
+
+    static {
+        boolean hasLogger = true;
+        try {
+            Class.forName("org.slf4j.impl.StaticLoggerBinder");
+        } catch (ClassNotFoundException ignore) {
+            hasLogger = false;
+        }
+        LOGGER = hasLogger ? LoggerFactory.getLogger(SillyBatch.class) : new ConsoleLogger();
+    }
 
     /* ------------------------- param -------------------------- */
 
-    private String name = "silly batch";
+    private String name = "silly-batch";
 
     // read record concurrently
     private boolean parallelRead = false;
@@ -201,7 +212,7 @@ public class SillyBatch<I, O> {
             return 1;
         } catch (Exception e) {
             aborted.set(true);
-            LOGGER.error("Error occurred.", e);
+            LOGGER.error("({}) Error occurred.", name, e);
             return 1;
         } finally {
             // clean context
@@ -289,7 +300,7 @@ public class SillyBatch<I, O> {
         metrics.setTotal(reader.getTotal());
         metrics.setStartTime(LocalDateTime.now());
 
-        LOGGER.info("Execution started ...");
+        LOGGER.info("({}) Execution started ...", name);
         reporter.start();
     }
 
@@ -335,19 +346,19 @@ public class SillyBatch<I, O> {
         }
 
         if (parallelRead && !externalReadExecutor && !readExecutor.isTerminated()) {
-            LOGGER.info("Wait for readExecutor to be terminated timeout, into force clean mode ...");
+            LOGGER.info("({}) Wait for readExecutor to be terminated timeout, into force clean mode ...", name);
             forceClean = true;
             readExecutor.shutdownNow();
         }
 
         if (parallelProcess && !externalProcessExecutor && !processExecutor.isTerminated()) {
-            LOGGER.info("Wait for processExecutor to be terminated timeout, into force clean mode ...");
+            LOGGER.info("({}) Wait for processExecutor to be terminated timeout, into force clean mode ...", name);
             forceClean = true;
             processExecutor.shutdownNow();
         }
 
         if (parallelWrite && !externalWriteExecutor && !writeExecutor.isTerminated()) {
-            LOGGER.info("Wait for writeExecutor to be terminated timeout, into force clean mode ...");
+            LOGGER.info("({}) Wait for writeExecutor to be terminated timeout, into force clean mode ...", name);
             forceClean = true;
             writeExecutor.shutdownNow();
         }
@@ -365,7 +376,7 @@ public class SillyBatch<I, O> {
         closeProcessor();
 
         started = false;
-        LOGGER.info("Execution {}!\n{}", aborted.get() ? "failed" : "succeeded", metrics.toString());
+        LOGGER.info("({}) Execution {}!\n{}", name, aborted.get() ? "failed" : "succeeded", metrics.toString());
     }
 
     private void throwExceptionIfStarted() {
@@ -376,13 +387,13 @@ public class SillyBatch<I, O> {
 
     private void tryShutdownExecutor(ExecutorService executor, String desc) {
         if (!executor.isShutdown()) {
-            LOGGER.info("Terminating {} ...", desc);
+            LOGGER.info("({}) Terminating {} ...", name, desc);
             executor.shutdown();
         }
         try {
             executor.awaitTermination(SHUTDOWN_WAIT, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
-            LOGGER.error("Wait for {} to be terminated interrupted.", desc);
+            LOGGER.error("({}) Wait for {} to be terminated interrupted.", name, desc);
         }
     }
 
@@ -411,14 +422,14 @@ public class SillyBatch<I, O> {
             return records;
         } catch (Exception e) {
             if (!forceClean) {
-                LOGGER.error("Error reading records", e);
+                LOGGER.error("({}) Error reading records", name, e);
                 onReadError(e);
                 metrics.addErrorCount(readChunk ? chunkSize : 1);
                 if (metrics.getErrorCount() > failover) {
                     throw new FailOverExceededException();
                 }
             } else {
-                LOGGER.error("Error occurred while stop reading forcibly.", e);
+                LOGGER.error("({}) Error occurred while stop reading forcibly.", name, e);
             }
             return Collections.emptyList();
         }
@@ -441,14 +452,14 @@ public class SillyBatch<I, O> {
             }
         } catch (Exception e) {
             if (!forceClean) {
-                LOGGER.error("Exception in processing record", e);
+                LOGGER.error("({}) Exception in processing record", name, e);
                 onProcessError(e, record);
                 metrics.incrementErrorCount();
                 if (metrics.getErrorCount() > failover) {
                     throw new FailOverExceededException();
                 }
             } else {
-                LOGGER.error("Error occurred while stop processing forcibly.", e);
+                LOGGER.error("({}) Error occurred while stop processing forcibly.", name, e);
             }
         }
     }
@@ -465,14 +476,14 @@ public class SillyBatch<I, O> {
             metrics.addWriteCount(records.size());
         } catch (Exception e) {
             if (!forceClean) {
-                LOGGER.error("Exception in writing records", e);
+                LOGGER.error("({}) Exception in writing records", name, e);
                 onWriteError(e, records);
                 metrics.addErrorCount(records.size());
                 if (metrics.getErrorCount() > failover) {
                     throw new FailOverExceededException();
                 }
             } else {
-                LOGGER.error("Error occurred while stop writing forcibly.", e);
+                LOGGER.error("({}) Error occurred while stop writing forcibly.", name, e);
             }
         }
     }
@@ -499,7 +510,7 @@ public class SillyBatch<I, O> {
                 readListener.onReadError(e);
             }
         } catch (Exception ex) {
-            LOGGER.error("Read listener error.", ex);
+            LOGGER.error("({}) Read listener error.", name, ex);
         }
     }
 
@@ -509,7 +520,7 @@ public class SillyBatch<I, O> {
                 processListener.onProcessError(e, record);
             }
         } catch (Exception ex) {
-            LOGGER.error("Process listener error.", ex);
+            LOGGER.error("({}) Process listener error.", name, ex);
         }
     }
 
@@ -519,7 +530,7 @@ public class SillyBatch<I, O> {
                 writeListener.onWriteError(e, records);
             }
         } catch (Exception ex) {
-            LOGGER.error("Read listener error.", ex);
+            LOGGER.error("({}) Read listener error.", name, ex);
         }
     }
 
@@ -530,7 +541,7 @@ public class SillyBatch<I, O> {
                 try {
                     future.get();
                 } catch (ExecutionException e) {
-                    LOGGER.error("Unexpected error while waiting for job to be completed.", e);
+                    LOGGER.error("({}) Unexpected error while waiting for job to be completed.", name, e);
                 }
             }
         }
@@ -577,7 +588,7 @@ public class SillyBatch<I, O> {
                     sleep(reportInterval);
                     if (!metrics.equals(last)) {
                         last = metrics.copy();
-                        LOGGER.info(metrics.report());
+                        LOGGER.info("({}) status:{}", name, metrics.report());
                     }
                 } catch (InterruptedException ignore) {
                     return;
@@ -594,7 +605,7 @@ public class SillyBatch<I, O> {
 
         @Override
         public void run() {
-            LOGGER.info("Read manager started ...");
+            LOGGER.info("({}) Read manager started ...", name);
             try {
                 if (parallelRead) {
                     for (int i = 0; i <= poolSize; i++) {
@@ -623,15 +634,15 @@ public class SillyBatch<I, O> {
             } catch (FailOverExceededException e) {
                 // prevent repeat LOGGER
                 if (aborted.compareAndSet(false, true)) {
-                    LOGGER.error("Exceed failover, abort execution.");
+                    LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
                 }
             } catch (Exception e) {
-                LOGGER.error("Unexpected error happened while reading records, abort execution.", e);
+                LOGGER.error("({}) Unexpected error happened while reading records, abort execution.", name, e);
                 aborted.set(true);
                 mainThread.interrupt();
             } finally {
-                LOGGER.info("Read manager stopped.");
+                LOGGER.info("({}) Read manager stopped.", name);
                 readFinished = true;
             }
         }
@@ -646,7 +657,7 @@ public class SillyBatch<I, O> {
 
         @Override
         public void run() {
-            LOGGER.info("Process manager started ...");
+            LOGGER.info("({}) Process manager started ...", name);
             try {
                 I record;
                 while (!readFinished) {
@@ -674,15 +685,15 @@ public class SillyBatch<I, O> {
             } catch (FailOverExceededException e) {
                 // prevent repeat LOGGER
                 if (aborted.compareAndSet(false, true)) {
-                    LOGGER.error("Exceed failover, abort execution.");
+                    LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
                 }
             } catch (Exception e) {
-                LOGGER.error("Unexpected error happened while processing records, abort execution.", e);
+                LOGGER.error("({}) Unexpected error happened while processing records, abort execution.", name, e);
                 aborted.set(true);
                 mainThread.interrupt();
             } finally {
-                LOGGER.info("Process manager stopped.");
+                LOGGER.info("({}) Process manager stopped.", name);
                 processFinished = true;
             }
         }
@@ -696,7 +707,7 @@ public class SillyBatch<I, O> {
 
         @Override
         public void run() {
-            LOGGER.info("Write manager started ...");
+            LOGGER.info("({}) Write manager started ...", name);
             try {
                 O record;
                 List<O> buffer = new ArrayList<>(bufferSize);
@@ -739,15 +750,15 @@ public class SillyBatch<I, O> {
             } catch (FailOverExceededException e) {
                 // prevent repeat LOGGER
                 if (aborted.compareAndSet(false, true)) {
-                    LOGGER.error("Exceed failover, abort execution.");
+                    LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
                 }
             } catch (Exception e) {
-                LOGGER.error("Unexpected error happened while writing records, abort execution.", e);
+                LOGGER.error("({}) Unexpected error happened while writing records, abort execution.", name, e);
                 aborted.set(true);
                 mainThread.interrupt();
             } finally {
-                LOGGER.info("Write manager stopped.");
+                LOGGER.info("({}) Write manager stopped.", name);
             }
         }
     }
@@ -799,12 +810,12 @@ public class SillyBatch<I, O> {
             } catch (FailOverExceededException e) {
                 // prevent repeat LOGGER
                 if (aborted.compareAndSet(false, true)) {
-                    LOGGER.error("Exceed failover, abort execution.");
+                    LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
                 }
             } catch (BatchAbortedException ignore) {
             } catch (Exception e) {
-                LOGGER.error("Unexpected error happened while reading records, abort execution.", e);
+                LOGGER.error("({}) Unexpected error happened while reading records, abort execution.", name, e);
                 aborted.set(true);
                 mainThread.interrupt();
             } finally {
@@ -836,12 +847,12 @@ public class SillyBatch<I, O> {
             } catch (FailOverExceededException e) {
                 // prevent repeat log
                 if (aborted.compareAndSet(false, true)) {
-                    LOGGER.error("Exceed failover, abort execution.");
+                    LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
                 }
             } catch (BatchAbortedException ignore) {
             } catch (Exception e) {
-                LOGGER.error("Unexpected error happened while processing record, abort execution.", e);
+                LOGGER.error("({}) Unexpected error happened while processing record, abort execution.", name, e);
                 aborted.set(true);
                 mainThread.interrupt();
             }
@@ -869,12 +880,12 @@ public class SillyBatch<I, O> {
             } catch (FailOverExceededException e) {
                 // prevent repeat log
                 if (aborted.compareAndSet(false, true)) {
-                    LOGGER.error("Exceed failover, abort execution.");
+                    LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
                 }
             } catch (BatchAbortedException ignore) {
             } catch (Exception e) {
-                LOGGER.error("Unexpected error happened while writing record, abort execution.", e);
+                LOGGER.error("({}) Unexpected error happened while writing record, abort execution.", name, e);
                 aborted.set(true);
                 mainThread.interrupt();
             }
@@ -884,32 +895,32 @@ public class SillyBatch<I, O> {
     /* --------------------- open & close ---------------------- */
 
     private void openReader() throws Exception {
-        LOGGER.info("Opening record reader ...");
+        LOGGER.info("({}) Opening record reader ...", name);
         try {
             reader.open();
         } catch (Exception e) {
-            LOGGER.error("Unable to open record reader", e);
+            LOGGER.error("({}) Unable to open record reader", name, e);
             throw new Exception("Shutdown");
         }
     }
 
     private void openWriter() throws Exception {
-        LOGGER.info("Opening record writer ...");
+        LOGGER.info("({}) Opening record writer ...", name);
         try {
             writer.open();
         } catch (Exception e) {
-            LOGGER.error("Unable to open record writer", e);
+            LOGGER.error("({}) Unable to open record writer", name, e);
             throw new Exception("Shutdown");
         }
     }
 
     private void openProcessor() throws Exception {
         if (null != processor) {
-            LOGGER.info("Opening record processor ...");
+            LOGGER.info("({}) Opening record processor ...", name);
             try {
                 processor.open();
             } catch (Exception e) {
-                LOGGER.error("Unable to open record processor", e);
+                LOGGER.error("({}) Unable to open record processor", name, e);
                 throw new Exception("Shutdown");
             }
         }
@@ -917,29 +928,29 @@ public class SillyBatch<I, O> {
 
     private void closeReader() {
         try {
-            LOGGER.info("Closing record reader ...");
+            LOGGER.info("({}) Closing record reader ...", name);
             reader.close();
         } catch (Exception e) {
-            LOGGER.error("Unable to close record reader", e);
+            LOGGER.error("({}) Unable to close record reader", name, e);
         }
     }
 
     private void closeWriter() {
         try {
-            LOGGER.info("Closing record writer ...");
+            LOGGER.info("({}) Closing record writer ...", name);
             writer.close();
         } catch (Exception e) {
-            LOGGER.error("Unable to close record writer", e);
+            LOGGER.error("({}) Unable to close record writer", name, e);
         }
     }
 
     private void closeProcessor() {
         if (null != processor) {
             try {
-                LOGGER.info("Closing record processor ...");
+                LOGGER.info("({}) Closing record processor ...", name);
                 processor.close();
             } catch (Exception e) {
-                LOGGER.error("Unable to close record processor", e);
+                LOGGER.error("({}) Unable to close record processor", name, e);
             }
         }
     }
