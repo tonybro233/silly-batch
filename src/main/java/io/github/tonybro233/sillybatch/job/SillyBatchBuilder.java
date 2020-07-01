@@ -10,6 +10,7 @@ import io.github.tonybro233.sillybatch.writer.RecordWriter;
 
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Builder of silly batch, enable configuring and creating batch
@@ -52,6 +53,10 @@ public final class SillyBatchBuilder<I, O> {
 
     private Integer poolSize;
 
+    private Integer readQueueCapacity;
+
+    private Integer writeQueueCapacity;
+
     private ExecutorService readExecutor;
 
     private ExecutorService processExecutor;
@@ -88,6 +93,8 @@ public final class SillyBatchBuilder<I, O> {
         this.chunkSize = builder.chunkSize;
         this.failover = builder.failover;
         this.poolSize = builder.poolSize;
+        this.readQueueCapacity = builder.readQueueCapacity;
+        this.writeQueueCapacity = builder.writeQueueCapacity;
         this.readExecutor = builder.readExecutor;
         this.processExecutor = builder.processExecutor;
         this.writeExecutor = builder.writeExecutor;
@@ -210,6 +217,9 @@ public final class SillyBatchBuilder<I, O> {
      */
     public SillyBatchBuilder<I, O> parallelRead(boolean parallelRead) {
         this.parallelRead = parallelRead;
+        if (!parallelRead) {
+            this.readExecutor = null;
+        }
         return this;
     }
 
@@ -234,6 +244,9 @@ public final class SillyBatchBuilder<I, O> {
      */
     public SillyBatchBuilder<I, O> parallelProcess(boolean parallelProcess) {
         this.parallelProcess = parallelProcess;
+        if (!parallelProcess) {
+            this.processExecutor = null;
+        }
         return this;
     }
 
@@ -257,6 +270,9 @@ public final class SillyBatchBuilder<I, O> {
      */
     public SillyBatchBuilder<I, O> parallelWrite(boolean parallelWrite) {
         this.parallelWrite = parallelWrite;
+        if (!parallelWrite) {
+            this.writeExecutor = null;
+        }
         return this;
     }
 
@@ -309,6 +325,60 @@ public final class SillyBatchBuilder<I, O> {
      */
     public SillyBatchBuilder<I, O> poolSize(int poolSize) {
         this.poolSize = poolSize;
+        return this;
+    }
+
+    /**
+     * Set the capacity of read queue, reader will be waiting when read queue is full.
+     * If your memory is limited and reader is much more faster than processor, then
+     * there maybe too much data hold in read queue or task queue of process executor
+     * and causing out of memory error, you can set the read queue capacity to slow down reader.
+     * The default value is {@link Integer#MAX_VALUE} <br>
+     * <b>NOTICE</b>:
+     * <ol>
+     *     <li> This property is not compatible with forceOrder set to true. When using forceOrder,
+     *     processor won't begin until all data has been read, if read queue's capacity is
+     *     limited, reader will block forever.
+     *     </li>
+     *     <li> If you choose parallel process and specified your own executor,
+     *     this property is not gonna work, you should set the task queue's capacity of your
+     *     executor by yourself and set the reject handler as {@link ThreadPoolExecutor.CallerRunsPolicy}
+     *     or something like that.
+     *     </li>
+     * </ol>
+     *
+     */
+    public SillyBatchBuilder<I, O> readQueueCapacity(int capacity) {
+        this.readQueueCapacity = capacity;
+        return this;
+    }
+
+    /**
+     * Set the capacity of write queue, processor will be waiting when write queue is full.
+     * If your memory is limited and writer is much more slower than processor or reader,
+     * then there maybe too much data hold in write queue or task queue of write executor
+     * and causing out of memory error, you can set the write queue capacity to slow down
+     * processor (may cause reader to slow down at the same time).
+     * The default value is {@link Integer#MAX_VALUE} <br>
+     * <b>NOTICE</b>:
+     * <ol>
+     *     <li> This property is not compatible with forceOrder set to true. When using forceOrder,
+     *     writer won't begin until all data has been processed, if write queue's capacity is
+     *     limited, processor will block forever.
+     *     </li>
+     *     <li> If you have the capacity of write queue, usually you should set the capacity of
+     *     read queue at the same time as when processor is slowed down, data is more likely
+     *     to pile up in read queue.
+     *     </li>
+     *     <li> If you choose parallel write and specified your own executor, this property
+     *     is not gonna work, you should set the task queue's capacity of your executor by
+     *     yourself and set the reject handler as {@link ThreadPoolExecutor.CallerRunsPolicy}
+     *     or something like that.
+     *     </li>
+     * </ol>
+     */
+    public SillyBatchBuilder<I, O> writeQueueCapacity(int capacity) {
+        this.writeQueueCapacity = capacity;
         return this;
     }
 
@@ -370,6 +440,8 @@ public final class SillyBatchBuilder<I, O> {
         Optional.ofNullable(chunkSize).ifPresent(batch::setChunkSize);
         Optional.ofNullable(failover).ifPresent(batch::setFailover);
         Optional.ofNullable(poolSize).ifPresent(batch::setPoolSize);
+        Optional.ofNullable(readQueueCapacity).ifPresent(batch::setReadQueueCapacity);
+        Optional.ofNullable(writeQueueCapacity).ifPresent(batch::setWriteQueueCapacity);
         Optional.ofNullable(readExecutor).ifPresent(batch::setParallelRead);
         Optional.ofNullable(processExecutor).ifPresent(batch::setParallelProcess);
         Optional.ofNullable(writeExecutor).ifPresent(batch::setParallelWrite);
