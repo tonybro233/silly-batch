@@ -19,7 +19,7 @@ import java.util.concurrent.ThreadPoolExecutor;
  * <p>This Builder provided composite implementations of core
  * interfaces and listener interfaces, you can add same kind of
  * component more than once. Notice that you should offer at
- * least one reader, but processor and writer are not mandatory.
+ * least one reader, processor and writer are not mandatory.
  *
  * @author tony
  */
@@ -336,17 +336,16 @@ public final class SillyBatchBuilder<I, O> {
      * The default value is {@link Integer#MAX_VALUE} <br>
      * <b>NOTICE</b>:
      * <ol>
-     *     <li> This property is not compatible with forceOrder set to true. When using forceOrder,
-     *     processor won't begin until all data has been read, if read queue's capacity is
-     *     limited, reader will block forever.
+     *     <li> This property is not compatible with forceOrder set to true. When using
+     *     forceOrder, processor won't begin until all data has been read, if read queue's
+     *     capacity is limited, reader will block forever.
      *     </li>
-     *     <li> If you choose parallel process and specified your own executor,
-     *     this property is not gonna work, you should set the task queue's capacity of your
-     *     executor by yourself and set the reject handler as {@link ThreadPoolExecutor.CallerRunsPolicy}
+     *     <li> If you choose parallel process and specified your own executor at the same time,
+     *     after set this property, you should make sure your executor's task queue is <b>bounded</b>
+     *     and executor's reject handler is instance of {@link ThreadPoolExecutor.CallerRunsPolicy}
      *     or something like that.
      *     </li>
      * </ol>
-     *
      */
     public SillyBatchBuilder<I, O> readQueueCapacity(int capacity) {
         this.readQueueCapacity = capacity;
@@ -366,13 +365,13 @@ public final class SillyBatchBuilder<I, O> {
      *     writer won't begin until all data has been processed, if write queue's capacity is
      *     limited, processor will block forever.
      *     </li>
-     *     <li> If you have the capacity of write queue, usually you should set the capacity of
+     *     <li> If you have set the capacity of write queue, usually you should set the capacity of
      *     read queue at the same time as when processor is slowed down, data is more likely
      *     to pile up in read queue.
      *     </li>
-     *     <li> If you choose parallel write and specified your own executor, this property
-     *     is not gonna work, you should set the task queue's capacity of your executor by
-     *     yourself and set the reject handler as {@link ThreadPoolExecutor.CallerRunsPolicy}
+     *     <li> If you choose parallel write and specified your own executor at the same time,
+     *     after set this property, you should make sure your executor's task queue is <b>bounded</b>
+     *     and executor's reject handler is instance of {@link ThreadPoolExecutor.CallerRunsPolicy}
      *     or something like that.
      *     </li>
      * </ol>

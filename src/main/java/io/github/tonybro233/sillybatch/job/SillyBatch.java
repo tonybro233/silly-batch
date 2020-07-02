@@ -581,7 +581,11 @@ public class SillyBatch<I, O> {
                 try {
                     future.get();
                 } catch (ExecutionException e) {
-                    LOGGER.error("({}) Unexpected error while waiting for job to be completed.", name, e);
+                    if (e.getCause() instanceof Error) {
+                        throw (Error) e.getCause();
+                    } else {
+                        LOGGER.error("({}) Unexpected exception while waiting for job to be completed.", name, e);
+                    }
                 }
             }
         }
@@ -692,6 +696,11 @@ public class SillyBatch<I, O> {
                 LOGGER.error("({}) Unexpected error happened while reading records, abort execution.", name, e);
                 aborted.set(true);
                 mainThread.interrupt();
+            } catch (Throwable t) {
+                LOGGER.error("({}) System error happened while reading records, abort execution.");
+                aborted.set(true);
+                mainThread.interrupt();
+                throw t;
             } finally {
                 LOGGER.info("({}) Read manager stopped.", name);
                 readFinished = true;
@@ -746,6 +755,11 @@ public class SillyBatch<I, O> {
                 LOGGER.error("({}) Unexpected error happened while processing records, abort execution.", name, e);
                 aborted.set(true);
                 mainThread.interrupt();
+            } catch (Throwable t) {
+                LOGGER.error("({}) System error happened while processing records, abort execution.");
+                aborted.set(true);
+                mainThread.interrupt();
+                throw t;
             } finally {
                 LOGGER.info("({}) Process manager stopped.", name);
                 processFinished = true;
@@ -814,6 +828,11 @@ public class SillyBatch<I, O> {
                 LOGGER.error("({}) Unexpected error happened while writing records, abort execution.", name, e);
                 aborted.set(true);
                 mainThread.interrupt();
+            } catch (Throwable t) {
+                LOGGER.error("({}) System error happened while writing records, abort execution.");
+                aborted.set(true);
+                mainThread.interrupt();
+                throw t;
             } finally {
                 LOGGER.info("({}) Write manager stopped.", name);
             }
