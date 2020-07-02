@@ -330,7 +330,7 @@ public final class SillyBatchBuilder<I, O> {
 
     /**
      * Set the capacity of read queue, reader will be waiting when read queue is full.
-     * If your memory is limited and reader is much more faster than processor, then
+     * If runtime memory is limited and reader is much more faster than processor, then
      * there maybe too much data hold in read queue or task queue of process executor
      * and causing out of memory error, you can set the read queue capacity to slow down reader.
      * The default value is {@link Integer#MAX_VALUE} <br>
@@ -354,7 +354,7 @@ public final class SillyBatchBuilder<I, O> {
 
     /**
      * Set the capacity of write queue, processor will be waiting when write queue is full.
-     * If your memory is limited and writer is much more slower than processor or reader,
+     * If runtime memory is limited and writer is much more slower than processor or reader,
      * then there maybe too much data hold in write queue or task queue of write executor
      * and causing out of memory error, you can set the write queue capacity to slow down
      * processor (may cause reader to slow down at the same time).
