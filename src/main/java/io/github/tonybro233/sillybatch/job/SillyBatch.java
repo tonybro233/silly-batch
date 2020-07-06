@@ -25,8 +25,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>This batch has three classic steps: Read -> Process -> Write,
  * you can choose to handle records in order or in parallel inside every
  * step(default is in order). When all steps are using parallel mode,
- * the flow can be described as bellow (all steps are started at the same
- * time by default) :
+ * the work flow can be described as bellow (all steps are started at 
+ * the same time by default) :
  *
  * <pre>
  *             executor                             executor                              executor
@@ -190,6 +190,17 @@ public class SillyBatch<I, O> {
 
     /* ------------------------- main -------------------------- */
 
+    /**
+     * Trigger the batch. Batch execution won't throw any {@link Exception}
+     * except {@link Error} happened, use the return code for judgment if
+     * you need to determine whether batch is succeeded.
+     *
+     * <p><b>NOTICE</b>: It's not allowed to execute a batch instance
+     * more than once at the same time, batch can be re-executed once
+     * it has completed execution.
+     *
+     * @return 0 if success or 1 if failed
+     */
     public final int execute() {
         try {
             prepare();
@@ -687,7 +698,7 @@ public class SillyBatch<I, O> {
                 // stopped by reader or writer, just return
                 LOGGER.trace("({}) Read manager: Execution aborted", name);
             } catch (FailOverExceededException e) {
-                // prevent repeat LOGGER
+                // prevent repeat logging
                 if (aborted.compareAndSet(false, true)) {
                     LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
@@ -746,7 +757,7 @@ public class SillyBatch<I, O> {
                 // stopped by reader or writer, just return
                 LOGGER.trace("({}) Process manager: Execution aborted", name);
             } catch (FailOverExceededException e) {
-                // prevent repeat LOGGER
+                // prevent repeat logging
                 if (aborted.compareAndSet(false, true)) {
                     LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
@@ -756,7 +767,7 @@ public class SillyBatch<I, O> {
                 aborted.set(true);
                 mainThread.interrupt();
             } catch (Throwable t) {
-                LOGGER.error("({}) System error happened while processing records, abort execution.");
+                LOGGER.error("({}) System error happened while processing records, abort execution.", name);
                 aborted.set(true);
                 mainThread.interrupt();
                 throw t;
@@ -819,7 +830,7 @@ public class SillyBatch<I, O> {
                 // stopped by reader or writer, just return
                 LOGGER.trace("({}) Write manager: Execution aborted", name);
             } catch (FailOverExceededException e) {
-                // prevent repeat LOGGER
+                // prevent repeat logging
                 if (aborted.compareAndSet(false, true)) {
                     LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
@@ -888,7 +899,7 @@ public class SillyBatch<I, O> {
                     readOverLatch.countDown();
                 }
             } catch (FailOverExceededException e) {
-                // prevent repeat LOGGER
+                // prevent repeat logging
                 if (aborted.compareAndSet(false, true)) {
                     LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
