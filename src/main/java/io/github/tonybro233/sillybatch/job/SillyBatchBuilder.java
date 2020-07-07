@@ -67,6 +67,8 @@ public final class SillyBatchBuilder<I, O> {
 
     private Long reportInterval;
 
+    private Boolean needConfirm;
+
 
     private SillyBatchBuilder(String batchName) {
         this.batchName = batchName;
@@ -100,6 +102,7 @@ public final class SillyBatchBuilder<I, O> {
         this.writeExecutor = builder.writeExecutor;
         this.report = builder.report;
         this.reportInterval = builder.reportInterval;
+        this.needConfirm = builder.needConfirm;
     }
 
     /**
@@ -405,6 +408,15 @@ public final class SillyBatchBuilder<I, O> {
     }
 
     /**
+     * Whether user should confirm before execution start.
+     * The default value is false.
+     */
+    public SillyBatchBuilder<I, O> needConfirm(boolean needConfirm) {
+        this.needConfirm = needConfirm;
+        return this;
+    }
+
+    /**
      * Build a silly batch instance.
      */
     public SillyBatch<I, O> build() {
@@ -451,6 +463,7 @@ public final class SillyBatchBuilder<I, O> {
         Optional.ofNullable(writeExecutor).ifPresent(batch::setParallelWrite);
         Optional.ofNullable(report).ifPresent(batch::setReport);
         Optional.ofNullable(reportInterval).ifPresent(batch::setReportInterval);
+        Optional.ofNullable(needConfirm).ifPresent(batch::setNeedConfirm);
 
         return batch;
     }

@@ -26,6 +26,7 @@ public class Testor {
                 .addReader(new TestReader())
                 .addProcessor(new TestProcessor())
                 .addWriter(new TestWriter())
+                .needConfirm(true)
                 .build()
                 .execute();
 

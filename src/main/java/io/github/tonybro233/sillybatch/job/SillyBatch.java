@@ -102,6 +102,9 @@ public class SillyBatch<I, O> {
     // capacity of write queue, also affect internal write executor's work queue
     private int writeQueueCapacity = 0;
 
+    // whether user should confirm the execution before start
+    private boolean needConfirm = false;
+
     /* ------------------------- core -------------------------- */
 
     private RecordReader<? extends I> reader;
@@ -154,7 +157,7 @@ public class SillyBatch<I, O> {
 
     private volatile boolean forceClean;
 
-    private volatile boolean started = false;
+    private AtomicBoolean started = new AtomicBoolean(false);
 
     private volatile boolean readChunk = false;
 
@@ -204,8 +207,12 @@ public class SillyBatch<I, O> {
      * @return 0 if success or 1 if failed
      */
     public final int execute() {
+        if (!prepare()) {
+            return 0;
+        }
+
         try {
-            prepare();
+            init();
 
             if (forceOrder) {
                 readManager.start();
@@ -243,37 +250,64 @@ public class SillyBatch<I, O> {
         return aborted.get() ? 1 : 0;
     }
 
-    private void prepare() throws Exception {
-        throwExceptionIfStarted();
-
+    private boolean prepare() {
+        int rqc, wqc;
         if (forceOrder) {
-            if (writeQueueCapacity > 0 || readQueueCapacity > 0) {
-                throw new IllegalArgumentException("ForceOrder option is not compatible with limited queue capacity");
+            if ((readQueueCapacity > 0 && readQueueCapacity != Integer.MAX_VALUE)
+                    || (writeQueueCapacity > 0 && writeQueueCapacity != Integer.MAX_VALUE)) {
+                LOGGER.error("ForceOrder option is not compatible with limited queue capacity");
+                return false;
             }
-            writeQueueCapacity = Integer.MAX_VALUE;
-            readQueueCapacity = Integer.MAX_VALUE;
+            rqc = Integer.MAX_VALUE;
+            wqc = Integer.MAX_VALUE;
         } else {
-            writeQueueCapacity = writeQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : writeQueueCapacity;
-            readQueueCapacity = readQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : readQueueCapacity;
+            rqc = readQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : readQueueCapacity;
+            wqc = writeQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : writeQueueCapacity;
         }
 
         LOGGER.info("Prepare executing {} !\n\tparallelRead={}, \n\tparallelProcess={}, \n\tparallelWrite={},"
-                        + "\n\tforceOrder={}, \n\tchunk={}, \n\tfailover={}, \n\tdefault-poolSize={},"
+                        + "\n\tforceOrder={}, \n\tchunk={}, \n\tfailover={}, \n\tpoolSize={},"
                         + "\n\treadQueueCapacity={}, \n\twriteQueueCapacity={}",
                 name, parallelRead, parallelProcess, parallelWrite,
-                forceOrder, chunkSize, failover, poolSize,
-                readQueueCapacity == Integer.MAX_VALUE ? "Infinite" : readQueueCapacity,
-                writeQueueCapacity == Integer.MAX_VALUE ? "Infinite" : writeQueueCapacity);
+                forceOrder, chunkSize, failover, getMaxPoolSizeInfo(),
+                rqc == Integer.MAX_VALUE ? "Infinite" : rqc,
+                wqc == Integer.MAX_VALUE ? "Infinite" : wqc);
 
         if (writeQueueCapacity != Integer.MAX_VALUE && readQueueCapacity == Integer.MAX_VALUE) {
             LOGGER.warn("Write queue's capacity is limited while read queue's capacity is infinite, "
                     + "this may cause data pile up in read queue !");
         }
 
+        if (needConfirm) {
+            System.out.print("Do you confirm?(Y/N): ");
+            Scanner sc = new Scanner(System.in);
+            while (sc.hasNextLine()) {
+                String s = sc.nextLine().trim().toUpperCase();
+                if (s.equals("Y")) {
+                    break;
+                } else if (s.equals("N")) {
+                    return false;
+                }
+                System.out.print("Do you confirm?(Y/N): ");
+            }
+        }
+
+        return true;
+    }
+
+    private void init() throws Exception {
+        tryStart();
+
+        if (forceOrder) {
+            readQueueCapacity = Integer.MAX_VALUE;
+            writeQueueCapacity = Integer.MAX_VALUE;
+        } else {
+            readQueueCapacity = readQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : readQueueCapacity;
+            writeQueueCapacity = writeQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : writeQueueCapacity;
+        }
+
         mainThread = Thread.currentThread();
-        metrics = new BatchMetrics();
         reporter = new BatchReporter();
-        started = true;
         forceClean = false;
         readOver = false;
         readOverLatch = new CountDownLatch(1);
@@ -341,7 +375,6 @@ public class SillyBatch<I, O> {
         openProcessor();
 
         metrics.setTotal(reader.getTotal());
-        metrics.setStartTime(LocalDateTime.now());
 
         LOGGER.info("({}) Execution started ...", name);
         reporter.start();
@@ -354,13 +387,13 @@ public class SillyBatch<I, O> {
             reporter.interrupt();
         }
 
-        if (readManager.isAlive()) {
+        if (null != readManager && readManager.isAlive()) {
             readManager.interrupt();
         }
-        if (processManager.isAlive()) {
+        if (null != processManager && processManager.isAlive()) {
             processManager.interrupt();
         }
-        if (writeManager.isAlive()) {
+        if (null != writeManager && writeManager.isAlive()) {
             writeManager.interrupt();
         }
 
@@ -388,19 +421,19 @@ public class SillyBatch<I, O> {
             }
         }
 
-        if (parallelRead && !externalReadExecutor && !readExecutor.isTerminated()) {
+        if (parallelRead && !externalReadExecutor && null != readExecutor && !readExecutor.isTerminated()) {
             LOGGER.info("({}) Wait for readExecutor to be terminated timeout, into force clean mode ...", name);
             forceClean = true;
             readExecutor.shutdownNow();
         }
 
-        if (parallelProcess && !externalProcessExecutor && !processExecutor.isTerminated()) {
+        if (parallelProcess && !externalProcessExecutor && null != processExecutor && !processExecutor.isTerminated()) {
             LOGGER.info("({}) Wait for processExecutor to be terminated timeout, into force clean mode ...", name);
             forceClean = true;
             processExecutor.shutdownNow();
         }
 
-        if (parallelWrite && !externalWriteExecutor && !writeExecutor.isTerminated()) {
+        if (parallelWrite && !externalWriteExecutor && null != writeExecutor && !writeExecutor.isTerminated()) {
             LOGGER.info("({}) Wait for writeExecutor to be terminated timeout, into force clean mode ...", name);
             forceClean = true;
             writeExecutor.shutdownNow();
@@ -418,17 +451,28 @@ public class SillyBatch<I, O> {
         closeWriter();
         closeProcessor();
 
-        started = false;
+        started.set(false);
         LOGGER.info("({}) Execution {}!\n{}", name, aborted.get() ? "failed" : "succeeded", metrics.toString());
     }
 
+    private void tryStart() {
+        if (!started.compareAndSet(false, true)) {
+            throw new IllegalStateException("This batch instance has already started!");
+        }
+        metrics = new BatchMetrics();
+        metrics.setStartTime(LocalDateTime.now());
+    }
+
     private void throwExceptionIfStarted() {
-        if (started) {
+        if (started.get()) {
             throw new IllegalStateException("This batch instance has already started!");
         }
     }
 
     private void tryShutdownExecutor(ExecutorService executor, String desc) {
+        if (null == executor) {
+            return;
+        }
         if (!executor.isShutdown()) {
             LOGGER.info("({}) Terminating {} ...", name, desc);
             executor.shutdown();
@@ -1183,6 +1227,48 @@ public class SillyBatch<I, O> {
             throw new IllegalArgumentException("Interval must be positive");
         }
         this.reportInterval = reportInterval;
+    }
+
+    public void setNeedConfirm(boolean needConfirm) {
+        throwExceptionIfStarted();
+        this.needConfirm = needConfirm;
+    }
+
+    /* --------------------- func ---------------------- */
+
+    private String getMaxPoolSizeInfo() {
+        StringJoiner joiner = new StringJoiner("/");
+        if (externalReadExecutor) {
+            if (readExecutor instanceof ThreadPoolExecutor) {
+                joiner.add(Integer.toString(((ThreadPoolExecutor) readExecutor).getMaximumPoolSize()));
+            } else {
+                joiner.add("external");
+            }
+        } else {
+            joiner.add(Integer.toString(poolSize));
+        }
+
+        if (externalProcessExecutor) {
+            if (processExecutor instanceof ThreadPoolExecutor) {
+                joiner.add(Integer.toString(((ThreadPoolExecutor) processExecutor).getMaximumPoolSize()));
+            } else {
+                joiner.add("external");
+            }
+        } else {
+            joiner.add(Integer.toString(poolSize));
+        }
+
+        if (externalWriteExecutor) {
+            if (writeExecutor instanceof ThreadPoolExecutor) {
+                joiner.add(Integer.toString(((ThreadPoolExecutor) writeExecutor).getMaximumPoolSize()));
+            } else {
+                joiner.add("external");
+            }
+        } else {
+            joiner.add(Integer.toString(poolSize));
+        }
+
+        return joiner.toString();
     }
 
     private void noticeIfOOM(Throwable e) {
