@@ -17,7 +17,7 @@ import static org.slf4j.spi.LocationAwareLogger.*;
  * that it has no related {@link org.slf4j.LoggerFactory}, only available when
  * no slf4j impl is provided.
  *
- * <p>Sample output follows.
+ * <p>Sample output:
  * <pre>
  *  17:50:00 INFO  - Message content is what ...
  *  17:50:00 INFO  - Opening record writer ...

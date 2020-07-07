@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>This batch has three classic steps: Read -> Process -> Write,
  * you can choose to handle records in order or in parallel inside every
  * step(default is in order). When all steps are using parallel mode,
- * the work flow can be described as bellow (all steps are started at 
+ * the work flow can be described as bellow (all steps are started at
  * the same time by default) :
  *
  * <pre>
@@ -97,10 +97,10 @@ public class SillyBatch<I, O> {
     private int poolSize = Runtime.getRuntime().availableProcessors() * 2;
 
     // capacity of read queue, also affect internal process executor's work queue
-    private int readQueueCapacity = Integer.MAX_VALUE;
+    private int readQueueCapacity = 0;
 
     // capacity of write queue, also affect internal write executor's work queue
-    private int writeQueueCapacity = Integer.MAX_VALUE;
+    private int writeQueueCapacity = 0;
 
     /* ------------------------- core -------------------------- */
 
@@ -180,6 +180,8 @@ public class SillyBatch<I, O> {
 
     /* ------------------------- const -------------------------- */
 
+    public static final int DEFAULT_QUEUE_SIZE = 1000;
+
     private static final long QUEUE_WAIT = 500L;
 
     private static final long SHUTDOWN_WAIT = 10000L;
@@ -231,13 +233,7 @@ public class SillyBatch<I, O> {
             LOGGER.error("({}) Error occurred.", name, e);
         } catch (Throwable e) {
             aborted.set(true);
-            if (e instanceof OutOfMemoryError) {
-                LOGGER.error("OOM occurred, if datasource can be treated as a stream and reader is much more faster than processor, " +
-                        "you should limit the capacity of read queue(setReadQueueCapacity) to make reader slow down; " +
-                        "if writer is much more slower than processor or reader, you should limit " +
-                        "the capacity of write queue(setWriteQueueCapacity) to make processor slow down. " +
-                        "If you limited the write queue, you should limit the read queue at the same time.");
-            }
+            noticeIfOOM(e);
             throw e;
         } finally {
             // clean context
@@ -249,6 +245,18 @@ public class SillyBatch<I, O> {
 
     private void prepare() throws Exception {
         throwExceptionIfStarted();
+
+        if (forceOrder) {
+            if (writeQueueCapacity > 0 || readQueueCapacity > 0) {
+                throw new IllegalArgumentException("ForceOrder option is not compatible with limited queue capacity");
+            }
+            writeQueueCapacity = Integer.MAX_VALUE;
+            readQueueCapacity = Integer.MAX_VALUE;
+        } else {
+            writeQueueCapacity = writeQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : writeQueueCapacity;
+            readQueueCapacity = readQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : readQueueCapacity;
+        }
+
         LOGGER.info("Prepare executing {} !\n\tparallelRead={}, \n\tparallelProcess={}, \n\tparallelWrite={},"
                         + "\n\tforceOrder={}, \n\tchunk={}, \n\tfailover={}, \n\tdefault-poolSize={},"
                         + "\n\treadQueueCapacity={}, \n\twriteQueueCapacity={}",
@@ -258,12 +266,8 @@ public class SillyBatch<I, O> {
                 writeQueueCapacity == Integer.MAX_VALUE ? "Infinite" : writeQueueCapacity);
 
         if (writeQueueCapacity != Integer.MAX_VALUE && readQueueCapacity == Integer.MAX_VALUE) {
-            LOGGER.warn("You have set the write queue's capacity but not set the read queue's capacity, "
+            LOGGER.warn("Write queue's capacity is limited while read queue's capacity is infinite, "
                     + "this may cause data pile up in read queue !");
-        }
-
-        if (forceOrder && (writeQueueCapacity != Integer.MAX_VALUE || readQueueCapacity != Integer.MIN_VALUE)) {
-            throw new IllegalArgumentException("ForceOrder option is not compatible with limited queue capacity");
         }
 
         mainThread = Thread.currentThread();
@@ -711,6 +715,7 @@ public class SillyBatch<I, O> {
                 LOGGER.error("({}) System error happened while reading records, abort execution.");
                 aborted.set(true);
                 mainThread.interrupt();
+                noticeIfOOM(t);
                 throw t;
             } finally {
                 LOGGER.info("({}) Read manager stopped.", name);
@@ -770,6 +775,7 @@ public class SillyBatch<I, O> {
                 LOGGER.error("({}) System error happened while processing records, abort execution.", name);
                 aborted.set(true);
                 mainThread.interrupt();
+                noticeIfOOM(t);
                 throw t;
             } finally {
                 LOGGER.info("({}) Process manager stopped.", name);
@@ -843,6 +849,7 @@ public class SillyBatch<I, O> {
                 LOGGER.error("({}) System error happened while writing records, abort execution.");
                 aborted.set(true);
                 mainThread.interrupt();
+                noticeIfOOM(t);
                 throw t;
             } finally {
                 LOGGER.info("({}) Write manager stopped.", name);
@@ -1176,5 +1183,16 @@ public class SillyBatch<I, O> {
             throw new IllegalArgumentException("Interval must be positive");
         }
         this.reportInterval = reportInterval;
+    }
+
+    private void noticeIfOOM(Throwable e) {
+        if (e instanceof OutOfMemoryError) {
+            LOGGER.error("OOM occurred, if the reason for this error is two much data piled in the queue, "
+                    + "you can try the following solution: First set the forceOrder to false, then if reader "
+                    + "is much more faster than processor, you should reduce the capacity of read queue(setReadQueueCapacity) "
+                    + "to make reader slow down; if writer is much more slower than processor or reader, you should reduce "
+                    + "the capacity of write queue(setWriteQueueCapacity) to make processor slow down. "
+                    + "Remember if you limited the write queue, you should limit the read queue at the same time.");
+        }
     }
 }

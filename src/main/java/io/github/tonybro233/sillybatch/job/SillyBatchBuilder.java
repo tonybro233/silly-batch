@@ -293,6 +293,9 @@ public final class SillyBatchBuilder<I, O> {
      * Process records after all records been read and write records after
      * all records been processed.
      * The default value is false.
+     * <b>NOTICE</b>: When set to true, you cannot set readQueue or writeQueue's
+     * capacity as SillyBatch will load all of the data into the memory. if queue's
+     * capacity is limited, batch might block forever.
      */
     public SillyBatchBuilder<I, O> forceOrder(boolean forceOrder) {
         this.forceOrder = forceOrder;
@@ -333,7 +336,8 @@ public final class SillyBatchBuilder<I, O> {
      * If runtime memory is limited and reader is much more faster than processor, then
      * there maybe too much data hold in read queue or task queue of process executor
      * and causing out of memory error, you can set the read queue capacity to slow down reader.
-     * The default value is {@link Integer#MAX_VALUE} <br>
+     * The default value is {@link SillyBatch#DEFAULT_QUEUE_SIZE} ({@link Integer#MAX_VALUE}
+     * in forceOrder mode) <br>
      * <b>NOTICE</b>:
      * <ol>
      *     <li> This property is not compatible with forceOrder set to true. When using
@@ -358,7 +362,8 @@ public final class SillyBatchBuilder<I, O> {
      * then there maybe too much data hold in write queue or task queue of write executor
      * and causing out of memory error, you can set the write queue capacity to slow down
      * processor (may cause reader to slow down at the same time).
-     * The default value is {@link Integer#MAX_VALUE} <br>
+     * The default value is {@link SillyBatch#DEFAULT_QUEUE_SIZE} ({@link Integer#MAX_VALUE}
+     * in forceOrder mode) <br>
      * <b>NOTICE</b>:
      * <ol>
      *     <li> This property is not compatible with forceOrder set to true. When using forceOrder,
