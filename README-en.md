@@ -1,5 +1,5 @@
 # silly-batch
-Silly Batch is a simple tool for java that seek for process order-independent data quickly. Sometimes you just want handle batch of data quickly, the order of the output is not in consider and you don't need some complex features like recover execution, the work flow is simple and the most important things are three core steps: reading, processing and writing. Coincidentally you don't want to use some big data frameworks like Hadoop or you don't have clusters at the same time, then you can use Silly Batch to help you accelerate your jobs. You can also use Silly Batch to do some concurrent performance tests quickly.
+Silly Batch is a simple Java batch tool that aimed for fast processing of order-independent data. Sometimes you just want handle batch of data quickly, the order of the output is not in consider and you don't need some complex features like execution recover, the work flow of your work is simple and focus on the three core steps: reading, processing and writing. Coincidentally you don't want to use some big data frameworks like Hadoop or you just don't have clusters, then you can use Silly Batch to help you accelerate your jobs. You can also use Silly Batch to do some concurrent performance tests quickly.
 
 ### Setup
 
@@ -27,6 +27,25 @@ Silly Batch is build on the classical producer/consumer model, doing things conc
            │ read() │                          │ process() │                          │ write()│
            ╰────────╯                          ╰───────────╯                          ╰────────╯
 ```
+
+### Parameters
+
+In addition to Reader, Processor and Writer, Silly Batch also offers a series of adjustable parameters as listed bellow:
+
+| name               | type    | description                                      | default value |
+| ------------------ | ------- | ------------------------------------------------ | ------------- |
+| parallelRead       | Boolean | whether to read data in parallel                 | false         |
+| parallelProcess    | Boolean | whether to process data in parallel              | false         |
+| parallelWrite      | Boolean | whether to write data in parallel                | false         |
+| forceOrder         | Boolean | force order of read, process, write              | false         |
+| chunkSize          | Integer | buffer size of read and write                    | 1             |
+| failOver           | Long    | threshold of exception                           | 0             |
+| poolSize           | Integer | default executor's pool size                     | cpu core * 2  |
+| readQueueCapacity  | Integer | capacity of internal read queue                  | 1000          |
+| writeQueueCapacity | Integer | capacity of internal write queue                 | 1000          |
+| needConfirm        | Boolean | whether user need confirm before execution start | false         |
+
+These parameters all have corresponding setter methods and can be specified in Builder,  see Builder's Javadoc for details of these parameters.
 
 ### Example
 
@@ -142,7 +161,7 @@ public class MeaningLessExample {
 
 - Using SLF4J logging api，easy to integrate with log implementation.
 - The way to achieve parallel reads is to submit self-submit reading job to the thread pool, the initial number of job is thread pool's size.
-- For each steps, Silly Batch will create thread pool when using parallel mode, it means that there are up to three default thread pools. Of course you can provide external thread pools, even specify one thread pool for three steps. But note that Silly Batch will always trying to submit a lot of jobs to the thread pool, when using single thread pool, if the speed of reading is much more faster than others, lots of processing jobs will be submitted at once, that cause the writing jobs ranked at the tail of the thread pool's  job queue, middle data will be stacked in queue for a long time. If it is a problem, consider using `PriorityThreadPoolExecutor` with `PriorityBlockingQueue`. 
-- Parallelism means sacrificing order, Silly Batch can also handle data in order(by default)，and support using `forceOrder` option to force doing processing after read over, doing writing after process over.
+- For each steps, Silly Batch will create thread pool when using parallel mode, it means that there are up to three default thread pools. You can provide external thread pools, even specify one thread pool for three steps (not recommend). If you need to use external thread pools, be sure to understand how Silly Batch works, then adjust the blocking queue's capacity of the thread pool and specify appropriate `ejectedExecutionHandler` for it.
+- Parallelism means sacrificing order, Silly Batch can also handle data in order(by default)，and support using `forceOrder` option to force doing processing after read over, doing writing after process over. Notice that in forceOrder mode, internal readQueue and writeQueue will change to unbounded queue, all data will be read into memory, make sure there is enough memory or it may cause OOM error.
 - When in parallel mode, job may not stopped immediately (limited by java thread model) when failed(exceed fail over), but will as soon as possible.
 - Be careful not to make your computer crash down.
