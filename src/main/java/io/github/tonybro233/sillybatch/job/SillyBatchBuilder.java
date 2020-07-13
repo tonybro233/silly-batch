@@ -13,7 +13,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /**
- * Builder of silly batch, enable configuring and creating batch
+ * Builder of {@link SillyBatch}, enable configuring and creating batch
  * by fluent api.
  *
  * <p>This Builder provided composite implementations of core
@@ -21,6 +21,7 @@ import java.util.concurrent.ThreadPoolExecutor;
  * component more than once. Notice that you should offer at
  * least one reader, processor and writer are not mandatory.
  *
+ * @see SillyBatch
  * @author tony
  */
 public final class SillyBatchBuilder<I, O> {
@@ -215,7 +216,7 @@ public final class SillyBatchBuilder<I, O> {
 
     /**
      * Read record in parallel mode (or not). Be sure the data source
-     * support parallel read and added readers, read listeners are thread safe.
+     * support parallel read and added readers, read listeners are thread-safe.
      * The default value is false.
      */
     public SillyBatchBuilder<I, O> parallelRead(boolean parallelRead) {
@@ -227,9 +228,10 @@ public final class SillyBatchBuilder<I, O> {
     }
 
     /**
-     * Read record in parallel mode and specify the executor. Be sure
-     * the data source support parallel read and added readers, read
-     * listeners are thread safe.
+     * Read record in parallel mode and specify the executor(Not recommend,
+     * you have to ensure the provided executor is suit with batch by yourself).
+     * Be sure the data source support parallel read and added readers, read
+     * listeners are thread-safe.
      */
     public SillyBatchBuilder<I, O> parallelRead(ExecutorService executor) {
         if (null == executor) {
@@ -242,7 +244,7 @@ public final class SillyBatchBuilder<I, O> {
 
     /**
      * Process record in parallel mode (or not). Be sure that the added
-     * processors, process listeners are thread safe.
+     * processors, process listeners are thread-safe.
      * The default value is false.
      */
     public SillyBatchBuilder<I, O> parallelProcess(boolean parallelProcess) {
@@ -254,8 +256,9 @@ public final class SillyBatchBuilder<I, O> {
     }
 
     /**
-     * Process record in parallel mode and specify the executor. Be sure
-     * that the added processors, process listeners are thread safe.
+     * Process record in parallel mode and specify the executor(Not recommend,
+     * you have to ensure the provided executor is suit with batch by yourself).
+     * Be sure that the added processors and process listeners are thread-safe.
      */
     public SillyBatchBuilder<I, O> parallelProcess(ExecutorService executor) {
         if (null == executor) {
@@ -268,7 +271,7 @@ public final class SillyBatchBuilder<I, O> {
 
     /**
      * Write record in parallel mode (or not). Be sure that the added
-     * writers, write listeners are thread safe.
+     * writers, write listeners are thread-safe.
      * The default value is false.
      */
     public SillyBatchBuilder<I, O> parallelWrite(boolean parallelWrite) {
@@ -280,8 +283,9 @@ public final class SillyBatchBuilder<I, O> {
     }
 
     /**
-     * Write record in parallel mode and specify the executor. Be sure
-     * that the added writers, write listeners are thread safe.
+     * Write record in parallel mode and specify the executor(Not recommend,
+     * you have to ensure the provided executor is suit with batch by yourself).
+     * Ensure that the added writers and write listeners are thread-safe.
      */
     public SillyBatchBuilder<I, O> parallelWrite(ExecutorService executor) {
         if (null == executor) {
@@ -296,7 +300,7 @@ public final class SillyBatchBuilder<I, O> {
      * Process records after all records been read and write records after
      * all records been processed.
      * The default value is false.
-     * <b>NOTICE</b>: When set to true, you cannot set readQueue or writeQueue's
+     * <b>NOTICE</b>: When set to true, you must not set readQueue or writeQueue's
      * capacity as SillyBatch will load all of the data into the memory. if queue's
      * capacity is limited, batch might block forever.
      */

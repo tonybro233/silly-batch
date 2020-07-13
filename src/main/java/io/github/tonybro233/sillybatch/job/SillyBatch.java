@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Simple and fast batch job, using producer/consumer model,
+ * Simple and fast batch job, based on producer/consumer model,
  * good at boosting work by parallel processing tasks but doesn't
  * support complex features such as job recover.
  *
@@ -42,10 +42,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>While using parallel mode, you have to ensure that handlers
  * ({@link RecordReader}, {@link RecordProcessor}, {@link RecordWriter})
  * and listeners ({@link RecordReadListener}, {@link RecordProcessListener},
- * {@link RecordWriteListener}) are thread safe, and be aware that
- * if you don't provide executor, silly batch will create executors
- * (fixed thread pool) for every step (means there are up to three
- * executors, but you are able to assign same executor for multiple steps).
+ * {@link RecordWriteListener}) are thread-safe.
  *
  * <p>Using {@link SillyBatchBuilder} to build instances.
  *
