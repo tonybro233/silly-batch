@@ -9,7 +9,7 @@ Maven中央仓库可用
 <dependency>
     <groupId>io.github.tonybro233</groupId>
     <artifactId>sillybatch</artifactId>
-    <version>1.2</version>
+    <version>1.3</version>
 </dependency>
 ```
 
