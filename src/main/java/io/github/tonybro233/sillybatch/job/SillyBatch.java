@@ -18,15 +18,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Simple and fast batch job, using producer/consumer model,
+ * Simple and fast batch job, based on producer/consumer model,
  * good at boosting work by parallel processing tasks but doesn't
  * support complex features such as job recover.
  *
  * <p>This batch has three classic steps: Read -> Process -> Write,
  * you can choose to handle records in order or in parallel inside every
  * step(default is in order). When all steps are using parallel mode,
- * the flow can be described as bellow (all steps are started at the same
- * time by default) :
+ * the work flow can be described as bellow (all steps are started at
+ * the same time by default) :
  *
  * <pre>
  *             executor                             executor                              executor
@@ -42,10 +42,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>While using parallel mode, you have to ensure that handlers
  * ({@link RecordReader}, {@link RecordProcessor}, {@link RecordWriter})
  * and listeners ({@link RecordReadListener}, {@link RecordProcessListener},
- * {@link RecordWriteListener}) are thread safe, and be aware that
- * if you don't provide executor, silly batch will create executors
- * (fixed thread pool) for every step (means there are up to three
- * executors, but you can also assign same executor for multiple steps).
+ * {@link RecordWriteListener}) are thread-safe.
  *
  * <p>Using {@link SillyBatchBuilder} to build instances.
  *
@@ -96,6 +93,15 @@ public class SillyBatch<I, O> {
     // default pool size while creating executor(fixed thread pool)
     private int poolSize = Runtime.getRuntime().availableProcessors() * 2;
 
+    // capacity of read queue, also affect internal process executor's work queue
+    private int readQueueCapacity = 0;
+
+    // capacity of write queue, also affect internal write executor's work queue
+    private int writeQueueCapacity = 0;
+
+    // whether user should confirm the execution before start
+    private boolean needConfirm = false;
+
     /* ------------------------- core -------------------------- */
 
     private RecordReader<? extends I> reader;
@@ -128,7 +134,7 @@ public class SillyBatch<I, O> {
 
     private LinkedBlockingQueue<I> readQueue;
 
-    private LinkedBlockingDeque<O> writeQueue;
+    private LinkedBlockingQueue<O> writeQueue;
 
     private CountDownLatch readOverLatch;
 
@@ -148,7 +154,7 @@ public class SillyBatch<I, O> {
 
     private volatile boolean forceClean;
 
-    private volatile boolean started = false;
+    private AtomicBoolean started = new AtomicBoolean(false);
 
     private volatile boolean readChunk = false;
 
@@ -174,6 +180,8 @@ public class SillyBatch<I, O> {
 
     /* ------------------------- const -------------------------- */
 
+    public static final int DEFAULT_QUEUE_SIZE = 1000;
+
     private static final long QUEUE_WAIT = 500L;
 
     private static final long SHUTDOWN_WAIT = 10000L;
@@ -184,9 +192,24 @@ public class SillyBatch<I, O> {
 
     /* ------------------------- main -------------------------- */
 
+    /**
+     * Trigger the batch. Batch execution won't throw any {@link Exception}
+     * except {@link Error} happened, use the return code for judgment if
+     * you need to determine whether batch is succeeded.
+     *
+     * <p><b>NOTICE</b>: It's not allowed to execute a batch instance
+     * more than once at the same time, batch can be re-executed once
+     * it has completed execution.
+     *
+     * @return 0 if success or 1 if failed
+     */
     public final int execute() {
+        if (!prepare()) {
+            return 0;
+        }
+
         try {
-            prepare();
+            init();
 
             if (forceOrder) {
                 readManager.start();
@@ -209,30 +232,79 @@ public class SillyBatch<I, O> {
         } catch (InterruptedException ignore) {
             // interrupter will log the exception
             aborted.set(true);
-            return 1;
         } catch (Exception e) {
             aborted.set(true);
             LOGGER.error("({}) Error occurred.", name, e);
-            return 1;
+        } catch (Throwable e) {
+            aborted.set(true);
+            noticeIfOOM(e);
+            throw e;
         } finally {
             // clean context
             teardown();
         }
 
-        return 0;
+        return aborted.get() ? 1 : 0;
     }
 
-    private void prepare() throws Exception {
-        throwExceptionIfStarted();
+    private boolean prepare() {
+        int rqc, wqc;
+        if (forceOrder) {
+            if ((readQueueCapacity > 0 && readQueueCapacity != Integer.MAX_VALUE)
+                    || (writeQueueCapacity > 0 && writeQueueCapacity != Integer.MAX_VALUE)) {
+                LOGGER.error("ForceOrder option is not compatible with limited queue capacity");
+                return false;
+            }
+            rqc = Integer.MAX_VALUE;
+            wqc = Integer.MAX_VALUE;
+        } else {
+            rqc = readQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : readQueueCapacity;
+            wqc = writeQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : writeQueueCapacity;
+        }
+
         LOGGER.info("Prepare executing {} !\n\tparallelRead={}, \n\tparallelProcess={}, \n\tparallelWrite={},"
-                        + "\n\tforceOrder={}, \n\tchunk={}, \n\tfailover={}, \n\tdefault-poolSize={}",
+                        + "\n\tforceOrder={}, \n\tchunk={}, \n\tfailover={}, \n\tpoolSize={},"
+                        + "\n\treadQueueCapacity={}, \n\twriteQueueCapacity={}",
                 name, parallelRead, parallelProcess, parallelWrite,
-                forceOrder, chunkSize, failover, poolSize);
+                forceOrder, chunkSize, failover, getMaxPoolSizeInfo(),
+                rqc == Integer.MAX_VALUE ? "Infinite" : rqc,
+                wqc == Integer.MAX_VALUE ? "Infinite" : wqc);
+
+        if (writeQueueCapacity != Integer.MAX_VALUE && readQueueCapacity == Integer.MAX_VALUE) {
+            LOGGER.warn("Write queue's capacity is limited while read queue's capacity is infinite, "
+                    + "this may cause data pile up in read queue !");
+        }
+
+        if (needConfirm) {
+            System.out.print("Do you confirm?(Y/N): ");
+            Scanner sc = new Scanner(System.in);
+            while (sc.hasNextLine()) {
+                String s = sc.nextLine().trim().toUpperCase();
+                if (s.equals("Y")) {
+                    break;
+                } else if (s.equals("N")) {
+                    return false;
+                }
+                System.out.print("Do you confirm?(Y/N): ");
+            }
+        }
+
+        return true;
+    }
+
+    private void init() throws Exception {
+        tryStart();
+
+        if (forceOrder) {
+            readQueueCapacity = Integer.MAX_VALUE;
+            writeQueueCapacity = Integer.MAX_VALUE;
+        } else {
+            readQueueCapacity = readQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : readQueueCapacity;
+            writeQueueCapacity = writeQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : writeQueueCapacity;
+        }
 
         mainThread = Thread.currentThread();
-        metrics = new BatchMetrics();
         reporter = new BatchReporter();
-        started = true;
         forceClean = false;
         readOver = false;
         readOverLatch = new CountDownLatch(1);
@@ -243,8 +315,8 @@ public class SillyBatch<I, O> {
         readChunk = chunkSize > 1 && reader.supportReadChunk();
         bufferSize = Math.max(10, chunkSize);
 
-        readQueue = new LinkedBlockingQueue<>();
-        writeQueue = new LinkedBlockingDeque<>();
+        readQueue = new LinkedBlockingQueue<>(readQueueCapacity);
+        writeQueue = new LinkedBlockingQueue<>(writeQueueCapacity);
 
         if (parallelRead) {
             readJobQueue = new LinkedList<>();
@@ -265,11 +337,12 @@ public class SillyBatch<I, O> {
                 processExecutor = new ThreadPoolExecutor(
                         poolSize, poolSize,
                         THREAD_TIMEOUT, TimeUnit.MILLISECONDS,
-                        new LinkedBlockingQueue<>(),
+                        new LinkedBlockingQueue<>(readQueueCapacity),
                         new BasicThreadFactory.Builder()
                                 .namingPattern("sb-processor-%d")
                                 .priority(Thread.NORM_PRIORITY + 1)
-                                .build());
+                                .build(),
+                        new ThreadPoolExecutor.CallerRunsPolicy());
                 ((ThreadPoolExecutor) processExecutor).allowCoreThreadTimeOut(true);
             }
         }
@@ -279,11 +352,12 @@ public class SillyBatch<I, O> {
                 writeExecutor = new ThreadPoolExecutor(
                         poolSize, poolSize,
                         THREAD_TIMEOUT, TimeUnit.MILLISECONDS,
-                        new LinkedBlockingQueue<>(),
+                        new LinkedBlockingQueue<>(writeQueueCapacity),
                         new BasicThreadFactory.Builder()
                                 .namingPattern("sb-writer-%d")
                                 .priority(Thread.NORM_PRIORITY + 2)
-                                .build());
+                                .build(),
+                        new ThreadPoolExecutor.CallerRunsPolicy());
             }
         }
 
@@ -298,7 +372,6 @@ public class SillyBatch<I, O> {
         openProcessor();
 
         metrics.setTotal(reader.getTotal());
-        metrics.setStartTime(LocalDateTime.now());
 
         LOGGER.info("({}) Execution started ...", name);
         reporter.start();
@@ -311,13 +384,13 @@ public class SillyBatch<I, O> {
             reporter.interrupt();
         }
 
-        if (readManager.isAlive()) {
+        if (null != readManager && readManager.isAlive()) {
             readManager.interrupt();
         }
-        if (processManager.isAlive()) {
+        if (null != processManager && processManager.isAlive()) {
             processManager.interrupt();
         }
-        if (writeManager.isAlive()) {
+        if (null != writeManager && writeManager.isAlive()) {
             writeManager.interrupt();
         }
 
@@ -345,19 +418,19 @@ public class SillyBatch<I, O> {
             }
         }
 
-        if (parallelRead && !externalReadExecutor && !readExecutor.isTerminated()) {
+        if (parallelRead && !externalReadExecutor && null != readExecutor && !readExecutor.isTerminated()) {
             LOGGER.info("({}) Wait for readExecutor to be terminated timeout, into force clean mode ...", name);
             forceClean = true;
             readExecutor.shutdownNow();
         }
 
-        if (parallelProcess && !externalProcessExecutor && !processExecutor.isTerminated()) {
+        if (parallelProcess && !externalProcessExecutor && null != processExecutor && !processExecutor.isTerminated()) {
             LOGGER.info("({}) Wait for processExecutor to be terminated timeout, into force clean mode ...", name);
             forceClean = true;
             processExecutor.shutdownNow();
         }
 
-        if (parallelWrite && !externalWriteExecutor && !writeExecutor.isTerminated()) {
+        if (parallelWrite && !externalWriteExecutor && null != writeExecutor && !writeExecutor.isTerminated()) {
             LOGGER.info("({}) Wait for writeExecutor to be terminated timeout, into force clean mode ...", name);
             forceClean = true;
             writeExecutor.shutdownNow();
@@ -375,17 +448,28 @@ public class SillyBatch<I, O> {
         closeWriter();
         closeProcessor();
 
-        started = false;
+        started.set(false);
         LOGGER.info("({}) Execution {}!\n{}", name, aborted.get() ? "failed" : "succeeded", metrics.toString());
     }
 
+    private void tryStart() {
+        if (!started.compareAndSet(false, true)) {
+            throw new IllegalStateException("This batch instance has already started!");
+        }
+        metrics = new BatchMetrics();
+        metrics.setStartTime(LocalDateTime.now());
+    }
+
     private void throwExceptionIfStarted() {
-        if (started) {
+        if (started.get()) {
             throw new IllegalStateException("This batch instance has already started!");
         }
     }
 
     private void tryShutdownExecutor(ExecutorService executor, String desc) {
+        if (null == executor) {
+            return;
+        }
         if (!executor.isShutdown()) {
             LOGGER.info("({}) Terminating {} ...", name, desc);
             executor.shutdown();
@@ -448,7 +532,17 @@ public class SillyBatch<I, O> {
                 metrics.incrementFilterCount();
             } else {
                 metrics.incrementProcessCount();
-                writeQueue.offer(out);
+                while (!writeQueue.offer(out, QUEUE_WAIT, TimeUnit.MILLISECONDS)) {
+                    if (aborted.get()) {
+                        return;
+                    }
+                }
+            }
+        } catch (InterruptedException e) {
+            if (aborted.get()) {
+                LOGGER.trace("({}) Sending data to write queue interrupted", name, e);
+            } else {
+                throw new RuntimeException("Interrupted while waiting to send data to write queue", e);
             }
         } catch (Exception e) {
             if (!forceClean) {
@@ -472,8 +566,8 @@ public class SillyBatch<I, O> {
         try {
             if (null != writeListener) { writeListener.beforeWrite(records); }
             writer.write(records);
-            if (null != writeListener) { writeListener.afterWrite(records); }
             metrics.addWriteCount(records.size());
+            if (null != writeListener) { writeListener.afterWrite(records); }
         } catch (Exception e) {
             if (!forceClean) {
                 LOGGER.error("({}) Exception in writing records", name, e);
@@ -490,6 +584,7 @@ public class SillyBatch<I, O> {
 
     private void processRecord(I record) {
         if (parallelProcess) {
+            // maybe caller run
             processJobQueue.offer(processExecutor.submit(new RecordProcessJob(record)));
         } else {
             doProcess(record);
@@ -498,6 +593,7 @@ public class SillyBatch<I, O> {
 
     private void writeRecords(List<O> records) {
         if (parallelWrite) {
+            // maybe caller run
             writeJobQueue.offer(writeExecutor.submit(new RecordWriteJob(records)));
         } else {
             doWrite(records);
@@ -541,7 +637,11 @@ public class SillyBatch<I, O> {
                 try {
                     future.get();
                 } catch (ExecutionException e) {
-                    LOGGER.error("({}) Unexpected error while waiting for job to be completed.", name, e);
+                    if (e.getCause() instanceof Error) {
+                        throw (Error) e.getCause();
+                    } else {
+                        LOGGER.error("({}) Unexpected exception while waiting for job to be completed.", name, e);
+                    }
                 }
             }
         }
@@ -621,18 +721,29 @@ public class SillyBatch<I, O> {
                         List<? extends I> records = doRead();
                         if (null != records) {
                             for (I record : records) {
-                                readQueue.offer(record);
+                                while (!readQueue.offer(record, QUEUE_WAIT, TimeUnit.MILLISECONDS)) {
+                                    if (aborted.get()) {
+                                        return;
+                                    }
+                                }
                             }
                         } else {
                             break;
                         }
                     }
                 }
-            } catch (InterruptedException | BatchAbortedException ignore) {
-                // InterruptedException: only main thread will interrupt manager
-                // BatchAbortedException: stopped by processor or writer, just return
+            } catch (InterruptedException e) {
+                // Under normal circumstances, only main thread will interrupt manager
+                if (aborted.get()) {
+                    LOGGER.trace("({}) Read manager is interrupted", name, e);
+                } else {
+                    throw new RuntimeException("Interrupted while waiting to send data to read queue", e);
+                }
+            } catch (BatchAbortedException ignore) {
+                // stopped by reader or writer, just return
+                LOGGER.trace("({}) Read manager: Execution aborted", name);
             } catch (FailOverExceededException e) {
-                // prevent repeat LOGGER
+                // prevent repeat logging
                 if (aborted.compareAndSet(false, true)) {
                     LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
@@ -641,6 +752,12 @@ public class SillyBatch<I, O> {
                 LOGGER.error("({}) Unexpected error happened while reading records, abort execution.", name, e);
                 aborted.set(true);
                 mainThread.interrupt();
+            } catch (Throwable t) {
+                LOGGER.error("({}) System error happened while reading records, abort execution.");
+                aborted.set(true);
+                mainThread.interrupt();
+                noticeIfOOM(t);
+                throw t;
             } finally {
                 LOGGER.info("({}) Read manager stopped.", name);
                 readFinished = true;
@@ -679,11 +796,14 @@ public class SillyBatch<I, O> {
                 }
 
                 waitForJobs(processJobQueue);
-            } catch (InterruptedException | BatchAbortedException ignore) {
-                // InterruptedException: only main thread will interrupt manager
-                // BatchAbortedException: stopped by reader or writer, just return
+            } catch (InterruptedException e) {
+                // Under normal circumstances, only main thread will interrupt manager
+                LOGGER.trace("({}) Process manager is interrupted", name, e);
+            } catch (BatchAbortedException ignore) {
+                // stopped by reader or writer, just return
+                LOGGER.trace("({}) Process manager: Execution aborted", name);
             } catch (FailOverExceededException e) {
-                // prevent repeat LOGGER
+                // prevent repeat logging
                 if (aborted.compareAndSet(false, true)) {
                     LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
@@ -692,6 +812,12 @@ public class SillyBatch<I, O> {
                 LOGGER.error("({}) Unexpected error happened while processing records, abort execution.", name, e);
                 aborted.set(true);
                 mainThread.interrupt();
+            } catch (Throwable t) {
+                LOGGER.error("({}) System error happened while processing records, abort execution.", name);
+                aborted.set(true);
+                mainThread.interrupt();
+                noticeIfOOM(t);
+                throw t;
             } finally {
                 LOGGER.info("({}) Process manager stopped.", name);
                 processFinished = true;
@@ -744,11 +870,14 @@ public class SillyBatch<I, O> {
                 }
 
                 waitForJobs(writeJobQueue);
-            } catch (InterruptedException | BatchAbortedException ignore) {
-                // InterruptedException: only main thread will interrupt manager
-                // BatchAbortedException: stopped by reader or processor, just return
+            } catch (InterruptedException e) {
+                // Under normal circumstances, only main thread will interrupt manager
+                LOGGER.trace("({}) Write manager is interrupted", name, e);
+            } catch (BatchAbortedException ignore) {
+                // stopped by reader or writer, just return
+                LOGGER.trace("({}) Write manager: Execution aborted", name);
             } catch (FailOverExceededException e) {
-                // prevent repeat LOGGER
+                // prevent repeat logging
                 if (aborted.compareAndSet(false, true)) {
                     LOGGER.error("({}) Exceed failover, abort execution.", name);
                     mainThread.interrupt();
@@ -757,6 +886,12 @@ public class SillyBatch<I, O> {
                 LOGGER.error("({}) Unexpected error happened while writing records, abort execution.", name, e);
                 aborted.set(true);
                 mainThread.interrupt();
+            } catch (Throwable t) {
+                LOGGER.error("({}) System error happened while writing records, abort execution.");
+                aborted.set(true);
+                mainThread.interrupt();
+                noticeIfOOM(t);
+                throw t;
             } finally {
                 LOGGER.info("({}) Write manager stopped.", name);
             }
@@ -801,16 +936,28 @@ public class SillyBatch<I, O> {
                 List<? extends I> records = doRead();
                 if (null != records) {
                     for (I record : records) {
-                        readQueue.offer(record);
+                        while (!readQueue.offer(record, QUEUE_WAIT, TimeUnit.MILLISECONDS)) {
+                            if (aborted.get()) {
+                                return;
+                            }
+                        }
                     }
                 } else {
                     readOver = true;
                     readOverLatch.countDown();
                 }
             } catch (FailOverExceededException e) {
-                // prevent repeat LOGGER
+                // prevent repeat logging
                 if (aborted.compareAndSet(false, true)) {
                     LOGGER.error("({}) Exceed failover, abort execution.", name);
+                    mainThread.interrupt();
+                }
+            } catch (InterruptedException e) {
+                if (aborted.get()) {
+                    LOGGER.trace("({}) Read job interrupted", name, e);
+                } else {
+                    LOGGER.error("({}) Read job interrupted (waiting to send data to read queue) while batch is still running", name, e);
+                    aborted.set(true);
                     mainThread.interrupt();
                 }
             } catch (BatchAbortedException ignore) {
@@ -1051,6 +1198,22 @@ public class SillyBatch<I, O> {
         this.poolSize = poolSize;
     }
 
+    public void setReadQueueCapacity(int capacity) {
+        throwExceptionIfStarted();
+        if (capacity <= 0) {
+            throw new IllegalArgumentException("Read queue capacity must be positive!");
+        }
+        this.readQueueCapacity = capacity;
+    }
+
+    public void setWriteQueueCapacity(int capacity) {
+        throwExceptionIfStarted();
+        if (capacity <= 0) {
+            throw new IllegalArgumentException("Write queue capacity must be positive!");
+        }
+        this.writeQueueCapacity = capacity;
+    }
+
     public void setReport(boolean report) {
         throwExceptionIfStarted();
         this.report = report;
@@ -1061,5 +1224,58 @@ public class SillyBatch<I, O> {
             throw new IllegalArgumentException("Interval must be positive");
         }
         this.reportInterval = reportInterval;
+    }
+
+    public void setNeedConfirm(boolean needConfirm) {
+        throwExceptionIfStarted();
+        this.needConfirm = needConfirm;
+    }
+
+    /* --------------------- func ---------------------- */
+
+    private String getMaxPoolSizeInfo() {
+        StringJoiner joiner = new StringJoiner("/");
+        if (externalReadExecutor) {
+            if (readExecutor instanceof ThreadPoolExecutor) {
+                joiner.add(Integer.toString(((ThreadPoolExecutor) readExecutor).getMaximumPoolSize()));
+            } else {
+                joiner.add("external");
+            }
+        } else {
+            joiner.add(Integer.toString(poolSize));
+        }
+
+        if (externalProcessExecutor) {
+            if (processExecutor instanceof ThreadPoolExecutor) {
+                joiner.add(Integer.toString(((ThreadPoolExecutor) processExecutor).getMaximumPoolSize()));
+            } else {
+                joiner.add("external");
+            }
+        } else {
+            joiner.add(Integer.toString(poolSize));
+        }
+
+        if (externalWriteExecutor) {
+            if (writeExecutor instanceof ThreadPoolExecutor) {
+                joiner.add(Integer.toString(((ThreadPoolExecutor) writeExecutor).getMaximumPoolSize()));
+            } else {
+                joiner.add("external");
+            }
+        } else {
+            joiner.add(Integer.toString(poolSize));
+        }
+
+        return joiner.toString();
+    }
+
+    private void noticeIfOOM(Throwable e) {
+        if (e instanceof OutOfMemoryError) {
+            LOGGER.error("OOM occurred, if the reason for this error is two much data piled in the queue, "
+                    + "you can try the following solution: First set the forceOrder to false, then if reader "
+                    + "is much more faster than processor, you should reduce the capacity of read queue(setReadQueueCapacity) "
+                    + "to make reader slow down; if writer is much more slower than processor or reader, you should reduce "
+                    + "the capacity of write queue(setWriteQueueCapacity) to make processor slow down. "
+                    + "Remember if you limited the write queue, you should limit the read queue at the same time.");
+        }
     }
 }

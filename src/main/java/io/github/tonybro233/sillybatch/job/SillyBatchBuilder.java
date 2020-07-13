@@ -10,16 +10,18 @@ import io.github.tonybro233.sillybatch.writer.RecordWriter;
 
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
- * Builder of silly batch, enable configuring and creating batch
+ * Builder of {@link SillyBatch}, enable configuring and creating batch
  * by fluent api.
  *
  * <p>This Builder provided composite implementations of core
  * interfaces and listener interfaces, you can add same kind of
  * component more than once. Notice that you should offer at
- * least one reader, but processor and writer are not mandatory.
+ * least one reader, processor and writer are not mandatory.
  *
+ * @see SillyBatch
  * @author tony
  */
 public final class SillyBatchBuilder<I, O> {
@@ -52,6 +54,10 @@ public final class SillyBatchBuilder<I, O> {
 
     private Integer poolSize;
 
+    private Integer readQueueCapacity;
+
+    private Integer writeQueueCapacity;
+
     private ExecutorService readExecutor;
 
     private ExecutorService processExecutor;
@@ -61,6 +67,8 @@ public final class SillyBatchBuilder<I, O> {
     private Boolean report;
 
     private Long reportInterval;
+
+    private Boolean needConfirm;
 
 
     private SillyBatchBuilder(String batchName) {
@@ -88,11 +96,14 @@ public final class SillyBatchBuilder<I, O> {
         this.chunkSize = builder.chunkSize;
         this.failover = builder.failover;
         this.poolSize = builder.poolSize;
+        this.readQueueCapacity = builder.readQueueCapacity;
+        this.writeQueueCapacity = builder.writeQueueCapacity;
         this.readExecutor = builder.readExecutor;
         this.processExecutor = builder.processExecutor;
         this.writeExecutor = builder.writeExecutor;
         this.report = builder.report;
         this.reportInterval = builder.reportInterval;
+        this.needConfirm = builder.needConfirm;
     }
 
     /**
@@ -205,18 +216,22 @@ public final class SillyBatchBuilder<I, O> {
 
     /**
      * Read record in parallel mode (or not). Be sure the data source
-     * support parallel read and added readers, read listeners are thread safe.
+     * support parallel read and added readers, read listeners are thread-safe.
      * The default value is false.
      */
     public SillyBatchBuilder<I, O> parallelRead(boolean parallelRead) {
         this.parallelRead = parallelRead;
+        if (!parallelRead) {
+            this.readExecutor = null;
+        }
         return this;
     }
 
     /**
-     * Read record in parallel mode and specify the executor. Be sure
-     * the data source support parallel read and added readers, read
-     * listeners are thread safe.
+     * Read record in parallel mode and specify the executor(Not recommend,
+     * you have to ensure the provided executor is suit with batch by yourself).
+     * Be sure the data source support parallel read and added readers, read
+     * listeners are thread-safe.
      */
     public SillyBatchBuilder<I, O> parallelRead(ExecutorService executor) {
         if (null == executor) {
@@ -229,17 +244,21 @@ public final class SillyBatchBuilder<I, O> {
 
     /**
      * Process record in parallel mode (or not). Be sure that the added
-     * processors, process listeners are thread safe.
+     * processors, process listeners are thread-safe.
      * The default value is false.
      */
     public SillyBatchBuilder<I, O> parallelProcess(boolean parallelProcess) {
         this.parallelProcess = parallelProcess;
+        if (!parallelProcess) {
+            this.processExecutor = null;
+        }
         return this;
     }
 
     /**
-     * Process record in parallel mode and specify the executor. Be sure
-     * that the added processors, process listeners are thread safe.
+     * Process record in parallel mode and specify the executor(Not recommend,
+     * you have to ensure the provided executor is suit with batch by yourself).
+     * Be sure that the added processors and process listeners are thread-safe.
      */
     public SillyBatchBuilder<I, O> parallelProcess(ExecutorService executor) {
         if (null == executor) {
@@ -252,17 +271,21 @@ public final class SillyBatchBuilder<I, O> {
 
     /**
      * Write record in parallel mode (or not). Be sure that the added
-     * writers, write listeners are thread safe.
+     * writers, write listeners are thread-safe.
      * The default value is false.
      */
     public SillyBatchBuilder<I, O> parallelWrite(boolean parallelWrite) {
         this.parallelWrite = parallelWrite;
+        if (!parallelWrite) {
+            this.writeExecutor = null;
+        }
         return this;
     }
 
     /**
-     * Write record in parallel mode and specify the executor. Be sure
-     * that the added writers, write listeners are thread safe.
+     * Write record in parallel mode and specify the executor(Not recommend,
+     * you have to ensure the provided executor is suit with batch by yourself).
+     * Ensure that the added writers and write listeners are thread-safe.
      */
     public SillyBatchBuilder<I, O> parallelWrite(ExecutorService executor) {
         if (null == executor) {
@@ -277,6 +300,9 @@ public final class SillyBatchBuilder<I, O> {
      * Process records after all records been read and write records after
      * all records been processed.
      * The default value is false.
+     * <b>NOTICE</b>: When set to true, you must not set readQueue or writeQueue's
+     * capacity as SillyBatch will load all of the data into the memory. if queue's
+     * capacity is limited, batch might block forever.
      */
     public SillyBatchBuilder<I, O> forceOrder(boolean forceOrder) {
         this.forceOrder = forceOrder;
@@ -286,9 +312,6 @@ public final class SillyBatchBuilder<I, O> {
     /**
      * Make reader and writer handle records in chunks (if supported).
      * The default value is 1.
-     *
-     * @param chunkSize size of chunk
-     * @return
      */
     public SillyBatchBuilder<I, O> chunkSize(int chunkSize) {
         this.chunkSize = chunkSize;
@@ -316,6 +339,61 @@ public final class SillyBatchBuilder<I, O> {
     }
 
     /**
+     * Set the capacity of read queue, reader will be waiting when read queue is full.
+     * If runtime memory is limited and reader is much more faster than processor, then
+     * there maybe too much data hold in read queue or task queue of process executor
+     * and causing out of memory error, you can set the read queue capacity to slow down reader.
+     * The default value is {@link SillyBatch#DEFAULT_QUEUE_SIZE} ({@link Integer#MAX_VALUE}
+     * in forceOrder mode) <br>
+     * <b>NOTICE</b>:
+     * <ol>
+     *     <li> This property is not compatible with forceOrder set to true. When using
+     *     forceOrder, processor won't begin until all data has been read, if read queue's
+     *     capacity is limited, reader will block forever.
+     *     </li>
+     *     <li> If you choose parallel process and specified your own executor at the same time,
+     *     after set this property, you should make sure your executor's task queue is <b>bounded</b>
+     *     and executor's reject handler is instance of {@link ThreadPoolExecutor.CallerRunsPolicy}
+     *     or something like that.
+     *     </li>
+     * </ol>
+     */
+    public SillyBatchBuilder<I, O> readQueueCapacity(int capacity) {
+        this.readQueueCapacity = capacity;
+        return this;
+    }
+
+    /**
+     * Set the capacity of write queue, processor will be waiting when write queue is full.
+     * If runtime memory is limited and writer is much more slower than processor or reader,
+     * then there maybe too much data hold in write queue or task queue of write executor
+     * and causing out of memory error, you can set the write queue capacity to slow down
+     * processor (may cause reader to slow down at the same time).
+     * The default value is {@link SillyBatch#DEFAULT_QUEUE_SIZE} ({@link Integer#MAX_VALUE}
+     * in forceOrder mode) <br>
+     * <b>NOTICE</b>:
+     * <ol>
+     *     <li> This property is not compatible with forceOrder set to true. When using forceOrder,
+     *     writer won't begin until all data has been processed, if write queue's capacity is
+     *     limited, processor will block forever.
+     *     </li>
+     *     <li> If you have set the capacity of write queue, usually you should set the capacity of
+     *     read queue at the same time as when processor is slowed down, data is more likely
+     *     to pile up in read queue.
+     *     </li>
+     *     <li> If you choose parallel write and specified your own executor at the same time,
+     *     after set this property, you should make sure your executor's task queue is <b>bounded</b>
+     *     and executor's reject handler is instance of {@link ThreadPoolExecutor.CallerRunsPolicy}
+     *     or something like that.
+     *     </li>
+     * </ol>
+     */
+    public SillyBatchBuilder<I, O> writeQueueCapacity(int capacity) {
+        this.writeQueueCapacity = capacity;
+        return this;
+    }
+
+    /**
      * Whether report metrics continuously by logging.
      * The default value is true.
      */
@@ -330,6 +408,15 @@ public final class SillyBatchBuilder<I, O> {
      */
     public SillyBatchBuilder<I, O> reportInterval(long interval) {
         this.reportInterval = interval;
+        return this;
+    }
+
+    /**
+     * Whether user should confirm before execution start.
+     * The default value is false.
+     */
+    public SillyBatchBuilder<I, O> needConfirm(boolean needConfirm) {
+        this.needConfirm = needConfirm;
         return this;
     }
 
@@ -373,11 +460,14 @@ public final class SillyBatchBuilder<I, O> {
         Optional.ofNullable(chunkSize).ifPresent(batch::setChunkSize);
         Optional.ofNullable(failover).ifPresent(batch::setFailover);
         Optional.ofNullable(poolSize).ifPresent(batch::setPoolSize);
+        Optional.ofNullable(readQueueCapacity).ifPresent(batch::setReadQueueCapacity);
+        Optional.ofNullable(writeQueueCapacity).ifPresent(batch::setWriteQueueCapacity);
         Optional.ofNullable(readExecutor).ifPresent(batch::setParallelRead);
         Optional.ofNullable(processExecutor).ifPresent(batch::setParallelProcess);
         Optional.ofNullable(writeExecutor).ifPresent(batch::setParallelWrite);
         Optional.ofNullable(report).ifPresent(batch::setReport);
         Optional.ofNullable(reportInterval).ifPresent(batch::setReportInterval);
+        Optional.ofNullable(needConfirm).ifPresent(batch::setNeedConfirm);
 
         return batch;
     }

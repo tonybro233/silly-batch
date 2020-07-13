@@ -12,19 +12,25 @@ public class Testor {
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(Testor.class);
 
     public static void main(String[] args) {
-        SillyBatchBuilder.<Integer>newBuilder()
-                .parallelRead(true)
+        int res = SillyBatchBuilder.<Integer>newBuilder()
+                .parallelRead(false)
                 .parallelProcess(true)
                 .parallelWrite(true)
                 // .forceOrder(true)
                 .chunkSize(10)
                 .failover(8)
+                .readQueueCapacity(5)
+                // .writeQueueCapacity(5)
+                // add reader twice
                 .addReader(new TestReader())
                 .addReader(new TestReader())
                 .addProcessor(new TestProcessor())
                 .addWriter(new TestWriter())
+                .needConfirm(true)
                 .build()
                 .execute();
+
+        System.out.println("Return value is " + res);
     }
 
     public static class TestReader implements RecordReader<Integer> {
@@ -33,7 +39,7 @@ public class Testor {
 
         @Override
         public Integer read() throws Exception {
-            Thread.sleep(1000);
+            // Thread.sleep(1000);
             int i = atomic.incrementAndGet();
             if (i >= 60 && i <= 62) {
                 throw new RuntimeException("Haha, mother fucker! " + i);
@@ -52,8 +58,9 @@ public class Testor {
     public static class TestProcessor implements RecordProcessor<Integer, Integer> {
         @Override
         public Integer process(Integer record) throws Exception {
+            Thread.sleep(1000);
             if (record % 2 == 0) {
-                return record * 2;
+                return record;
             } else {
                 return null;
             }
