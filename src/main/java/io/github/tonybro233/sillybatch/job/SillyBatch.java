@@ -132,9 +132,9 @@ public class SillyBatch<I, O> {
 
     private Queue<Future<?>> writeJobQueue;
 
-    private LinkedBlockingQueue<I> readQueue;
+    private ArrayBlockingQueue<I> readQueue;
 
-    private LinkedBlockingQueue<O> writeQueue;
+    private ArrayBlockingQueue<O> writeQueue;
 
     private CountDownLatch readOverLatch;
 
@@ -312,8 +312,8 @@ public class SillyBatch<I, O> {
         jobSeq = new AtomicLong();
         readChunk = chunkSize > 1 && reader.supportReadChunk();
 
-        readQueue = new LinkedBlockingQueue<>(readQueueCapacity);
-        writeQueue = new LinkedBlockingQueue<>(writeQueueCapacity);
+        readQueue = new ArrayBlockingQueue<>(readQueueCapacity);
+        writeQueue = new ArrayBlockingQueue<>(writeQueueCapacity);
 
         if (parallelRead) {
             readJobQueue = new LinkedList<>();
@@ -334,7 +334,7 @@ public class SillyBatch<I, O> {
                 processExecutor = new ThreadPoolExecutor(
                         poolSize, poolSize,
                         THREAD_TIMEOUT, TimeUnit.MILLISECONDS,
-                        new LinkedBlockingQueue<>(readQueueCapacity),
+                        new ArrayBlockingQueue<>(readQueueCapacity),
                         new BasicThreadFactory.Builder()
                                 .namingPattern("sb-processor-%d")
                                 .priority(Thread.NORM_PRIORITY + 1)
@@ -349,7 +349,7 @@ public class SillyBatch<I, O> {
                 writeExecutor = new ThreadPoolExecutor(
                         poolSize, poolSize,
                         THREAD_TIMEOUT, TimeUnit.MILLISECONDS,
-                        new LinkedBlockingQueue<>(writeQueueCapacity),
+                        new ArrayBlockingQueue<>(writeQueueCapacity),
                         new BasicThreadFactory.Builder()
                                 .namingPattern("sb-writer-%d")
                                 .priority(Thread.NORM_PRIORITY + 2)
