@@ -310,7 +310,7 @@ public final class SillyBatchBuilder<I, O> {
     }
 
     /**
-     * Make reader and writer handle records in chunks (if supported).
+     * Make reader handle records in chunks (if supported).
      * The default value is 1.
      */
     public SillyBatchBuilder<I, O> chunkSize(int chunkSize) {

@@ -41,9 +41,9 @@ public class CompositeRecordWriter <T> implements RecordWriter<T> {
     }
 
     @Override
-    public void write(List<? extends T> records) throws Exception {
+    public void write(T record) throws Exception {
         for (RecordWriter<? super T> writer : writers) {
-            writer.write(records);
+            writer.write(record);
         }
     }
 }

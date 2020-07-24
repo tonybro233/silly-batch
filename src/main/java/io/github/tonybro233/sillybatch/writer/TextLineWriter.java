@@ -3,7 +3,6 @@ package io.github.tonybro233.sillybatch.writer;
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
-import java.util.List;
 import java.util.function.Function;
 
 public class TextLineWriter<T> implements RecordWriter<T> {
@@ -54,10 +53,8 @@ public class TextLineWriter<T> implements RecordWriter<T> {
     }
 
     @Override
-    public void write(List<? extends T> records) throws Exception {
-        for (T record : records) {
-            writer.write(stringer.apply(record));
-            writer.newLine();
-        }
+    public void write(T record) throws Exception {
+        writer.write(stringer.apply(record));
+        writer.newLine();
     }
 }

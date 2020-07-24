@@ -1,7 +1,5 @@
 package io.github.tonybro233.sillybatch.writer;
 
-import java.util.List;
-
 public interface RecordWriter<T> {
 
     /**
@@ -19,11 +17,11 @@ public interface RecordWriter<T> {
     default void close() throws Exception { }
 
     /**
-     * Write a chunk of records.
+     * Write a record.
      *
-     * @param records records to write
+     * @param record record to write
      * @throws Exception Exception if an error occurs during writing
      */
-    void write(List<? extends T> records) throws Exception;
+    void write(T record) throws Exception;
 
 }

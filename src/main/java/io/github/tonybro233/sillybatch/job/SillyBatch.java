@@ -156,9 +156,7 @@ public class SillyBatch<I, O> {
 
     private AtomicBoolean started = new AtomicBoolean(false);
 
-    private volatile boolean readChunk = false;
-
-    private int bufferSize;
+    private boolean readChunk = false;
 
     private AtomicBoolean aborted;
 
@@ -313,7 +311,6 @@ public class SillyBatch<I, O> {
         aborted = new AtomicBoolean(false);
         jobSeq = new AtomicLong();
         readChunk = chunkSize > 1 && reader.supportReadChunk();
-        bufferSize = Math.max(10, chunkSize);
 
         readQueue = new LinkedBlockingQueue<>(readQueueCapacity);
         writeQueue = new LinkedBlockingQueue<>(writeQueueCapacity);
@@ -558,21 +555,21 @@ public class SillyBatch<I, O> {
         }
     }
 
-    private void doWrite(List<O> records) {
+    private void doWrite(O record) {
         if (aborted.get()) {
             throw new BatchAbortedException();
         }
 
         try {
-            if (null != writeListener) { writeListener.beforeWrite(records); }
-            writer.write(records);
-            metrics.addWriteCount(records.size());
-            if (null != writeListener) { writeListener.afterWrite(records); }
+            if (null != writeListener) { writeListener.beforeWrite(record); }
+            writer.write(record);
+            metrics.incrementWriteCount();
+            if (null != writeListener) { writeListener.afterWrite(record); }
         } catch (Exception e) {
             if (!forceClean) {
                 LOGGER.error("({}) Exception in writing records", name, e);
-                onWriteError(e, records);
-                metrics.addErrorCount(records.size());
+                onWriteError(e, record);
+                metrics.incrementErrorCount();
                 if (metrics.getErrorCount() > failover) {
                     throw new FailOverExceededException();
                 }
@@ -591,12 +588,12 @@ public class SillyBatch<I, O> {
         }
     }
 
-    private void writeRecords(List<O> records) {
+    private void writeRecord(O record) {
         if (parallelWrite) {
             // maybe caller run
-            writeJobQueue.offer(writeExecutor.submit(new RecordWriteJob(records)));
+            writeJobQueue.offer(writeExecutor.submit(new RecordWriteJob(record)));
         } else {
-            doWrite(records);
+            doWrite(record);
         }
     }
 
@@ -620,10 +617,10 @@ public class SillyBatch<I, O> {
         }
     }
 
-    private void onWriteError(Exception e, List<O> records) {
+    private void onWriteError(Exception e, O record) {
         try {
             if (null != writeListener) {
-                writeListener.onWriteError(e, records);
+                writeListener.onWriteError(e, record);
             }
         } catch (Exception ex) {
             LOGGER.error("({}) Read listener error.", name, ex);
@@ -836,17 +833,11 @@ public class SillyBatch<I, O> {
             LOGGER.info("({}) Write manager started ...", name);
             try {
                 O record;
-                List<O> buffer = new ArrayList<>(bufferSize);
                 while (!processFinished) {
                     record = writeQueue.poll(QUEUE_WAIT, TimeUnit.MILLISECONDS);
                     if (null != record) {
-                        buffer.add(record);
-                        if (buffer.size() == chunkSize) {
-                            writeRecords(buffer);
-                            buffer = new ArrayList<>(bufferSize);
-                        }
+                        writeRecord(record);
                     }
-
                     if (aborted.get()) {
                         return;
                     }
@@ -854,19 +845,10 @@ public class SillyBatch<I, O> {
 
                 // flush
                 while ((record = writeQueue.poll()) != null) {
-                    buffer.add(record);
-                    if (buffer.size() == chunkSize) {
-                        writeRecords(buffer);
-                        buffer = new ArrayList<>(bufferSize);
-                    }
-
+                    writeRecord(record);
                     if (aborted.get()) {
                         return;
                     }
-                }
-
-                if (!buffer.isEmpty()) {
-                    writeRecords(buffer);
                 }
 
                 waitForJobs(writeJobQueue);
@@ -1010,11 +992,11 @@ public class SillyBatch<I, O> {
 
         static final int PRIORITY = 0;
 
-        List<O> records;
+        O record;
 
-        public RecordWriteJob(List<O> records) {
+        public RecordWriteJob(O record) {
             super(PRIORITY);
-            this.records = records;
+            this.record = record;
         }
 
         @Override
@@ -1023,7 +1005,7 @@ public class SillyBatch<I, O> {
                 return;
             }
             try {
-                doWrite(records);
+                doWrite(record);
             } catch (FailOverExceededException e) {
                 // prevent repeat log
                 if (aborted.compareAndSet(false, true)) {
