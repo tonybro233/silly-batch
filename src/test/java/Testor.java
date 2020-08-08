@@ -71,11 +71,11 @@ public class Testor {
     public static class TestWriter implements RecordWriter<Integer> {
 
         @Override
-        public void write(List<? extends Integer> records) throws Exception {
+        public void write(Integer record) throws Exception {
             // if (records.size() < 5) {
             //     throw new RuntimeException("Haha, shitter! size:" + records.size());
             // }
-            log.info("Write Chunk :" + records.toString());
+            log.info("Write :" + record);
         }
     }
 }

@@ -8,7 +8,7 @@ import java.util.List;
  * write chunk of records at a time for you, then you can
  * implement your writer by inheriting this class for convenience.
  *
- * <p><b>NOTICE</b>: Writing is delayed by buffer flushing, this
+ * <p><b>NOTICE</b>: Writing is delayed by buffer flush, this
  * may affect the fault tolerance of the batch, and last records
  * may not written until writer is closed.
  *

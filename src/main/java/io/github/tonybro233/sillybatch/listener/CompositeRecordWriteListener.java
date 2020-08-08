@@ -24,25 +24,25 @@ public class CompositeRecordWriteListener<T> implements RecordWriteListener<T> {
     }
 
     @Override
-    public void beforeWrite(List<? extends T> records) {
+    public void beforeWrite(T record) {
         for (RecordWriteListener<? super T> listener : listeners) {
-            listener.beforeWrite(records);
+            listener.beforeWrite(record);
         }
     }
 
     @Override
-    public void afterWrite(List<? extends T> records) {
+    public void afterWrite(T record) {
         for (ListIterator<RecordWriteListener<? super T>> iterator
              = listeners.listIterator(listeners.size()); iterator.hasPrevious();) {
-            iterator.previous().afterWrite(records);
+            iterator.previous().afterWrite(record);
         }
     }
 
     @Override
-    public void onWriteError(Exception exception, List<? extends T> records) {
+    public void onWriteError(Exception exception, T record) {
         for (ListIterator<RecordWriteListener<? super T>> iterator
              = listeners.listIterator(listeners.size()); iterator.hasPrevious();) {
-            iterator.previous().onWriteError(exception, records);
+            iterator.previous().onWriteError(exception, record);
         }
     }
 }

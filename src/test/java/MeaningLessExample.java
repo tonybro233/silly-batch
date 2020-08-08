@@ -23,11 +23,7 @@ public class MeaningLessExample {
                 .name("Repeat bubble sort")
                 .addReader(new RandomArrayReader())
                 .addProcessor(new BubbleSortProcessor())
-                .addWriter(records -> {
-                    for (Duration duration : records) {
-                        System.out.println("Bubble sort using time : " + duration);
-                    }
-                })
+                .addWriter(d -> System.out.println("Bubble sort using time : " + d))
                 .addListener(new ReadTimeListener())
                 .parallelRead(executor)
                 .parallelProcess(executor)
