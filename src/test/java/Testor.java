@@ -17,7 +17,6 @@ public class Testor {
                 .parallelProcess(true)
                 .parallelWrite(true)
                 // .forceOrder(true)
-                .chunkSize(10)
                 .failover(8)
                 .readQueueCapacity(5)
                 // .writeQueueCapacity(5)

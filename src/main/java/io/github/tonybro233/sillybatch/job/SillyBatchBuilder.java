@@ -48,8 +48,6 @@ public final class SillyBatchBuilder<I, O> {
 
     private Boolean forceOrder;
 
-    private Integer chunkSize;
-
     private Long failover;
 
     private Integer poolSize;
@@ -93,7 +91,6 @@ public final class SillyBatchBuilder<I, O> {
         this.parallelProcess = builder.parallelProcess;
         this.parallelWrite = builder.parallelWrite;
         this.forceOrder = builder.forceOrder;
-        this.chunkSize = builder.chunkSize;
         this.failover = builder.failover;
         this.poolSize = builder.poolSize;
         this.readQueueCapacity = builder.readQueueCapacity;
@@ -310,15 +307,6 @@ public final class SillyBatchBuilder<I, O> {
     }
 
     /**
-     * Make reader handle records in chunks (if supported).
-     * The default value is 1.
-     */
-    public SillyBatchBuilder<I, O> chunkSize(int chunkSize) {
-        this.chunkSize = chunkSize;
-        return this;
-    }
-
-    /**
      * Set the error threshold of the batch. Batch will be aborted if the
      * error count larger than the failover.
      * The default value is 0. (Means abort batch as soon as error occurred)
@@ -457,7 +445,6 @@ public final class SillyBatchBuilder<I, O> {
         Optional.ofNullable(parallelProcess).ifPresent(batch::setParallelProcess);
         Optional.ofNullable(parallelWrite).ifPresent(batch::setParallelWrite);
         Optional.ofNullable(forceOrder).ifPresent(batch::setForceOrder);
-        Optional.ofNullable(chunkSize).ifPresent(batch::setChunkSize);
         Optional.ofNullable(failover).ifPresent(batch::setFailover);
         Optional.ofNullable(poolSize).ifPresent(batch::setPoolSize);
         Optional.ofNullable(readQueueCapacity).ifPresent(batch::setReadQueueCapacity);

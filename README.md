@@ -9,7 +9,7 @@ Maven中央仓库可用
 <dependency>
     <groupId>io.github.tonybro233</groupId>
     <artifactId>sillybatch</artifactId>
-    <version>1.2</version>
+    <version>1.3</version>
 </dependency>
 ```
 
@@ -38,7 +38,6 @@ Maven中央仓库可用
 | parallelProcess    | Boolean | 是否并行处理数据             | false         |
 | parallelWrite      | Boolean | 是否并行写数据               | false         |
 | forceOrder         | Boolean | 强制按顺序读、处理、写       | false         |
-| chunkSize          | Integer | 单次读、写的数据记录数量     | 1             |
 | failOver           | Long    | 处理失败容错次数             | 0             |
 | poolSize           | Integer | 默认线程池大小               | cpu核心数 * 2 |
 | readQueueCapacity  | Integer | 读取队列大小                 | 1000          |
@@ -67,10 +66,10 @@ public class MeaningLessExample {
                 .addListener(new ReadTimeListener())
                 .parallelRead(true)
                 .parallelProcess(true)
-                // .chunkSize(2)
                 .report(false)
                 // .forceOrder(true)
                 // .failover(10)
+                .needConfirm(true)
                 .build()
                 .execute();
     }
@@ -159,7 +158,7 @@ public class MeaningLessExample {
 
 ### 注意事项
 
-- 输出采用了SLF4J的API，可轻松集成具体的日志实现。
+- 输出采用了SLF4J的API，可轻松集成具体的日志实现。支持通过MBean查看运行状态。
 - 使用并行读时，采取的方式是提交线程池大小个递归提交的读取任务，直到`read()`方法返回null 。
 - 对于每个步骤，使用并行模式时默认都会创建独立线程池，这意味着最多会创建3个默认线程池。您也可以指定外部线程池，为三个步骤指定相同的线程池（通常来说不建议这么做）。当您需要指定使用外部线程池时，请务必理解“傻批”的工作原理，调整好线程池的阻塞队列大小以及指定合适的`RejectedExecutionHandler`。
 - 内部默认采用有界队列来传递数据，防止存储过多的中间数据导致内存耗尽。如果内存足够且追求极致速度，您可以将readQueue和writeQueue的大小设为`Integer.MAX_VALUE`。使用外部线程池时，您需要调整线程池的阻塞队列大小，保证其与内部队列大小适配。

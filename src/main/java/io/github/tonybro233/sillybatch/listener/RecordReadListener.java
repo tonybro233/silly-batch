@@ -7,7 +7,7 @@ import java.util.List;
 public interface RecordReadListener<T> {
 
     /**
-     * Called before {@link RecordReader#read()} and {@link RecordReader#readChunk(int)}
+     * Called before {@link RecordReader#read()} and {@link RecordReader#readChunk()}
      */
     void beforeRead();
 
@@ -18,7 +18,7 @@ public interface RecordReadListener<T> {
     void afterRead(T record);
 
     /**
-     * Called after {@link RecordReader#readChunk(int)}.
+     * Called after {@link RecordReader#readChunk()}.
      * Not called when the reader returns null.
      * The default implementation is calling {@link RecordReadListener#afterRead(T record)} by loop.
      */

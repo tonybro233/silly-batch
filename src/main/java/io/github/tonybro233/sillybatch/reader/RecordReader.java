@@ -38,6 +38,8 @@ public interface RecordReader<T> {
 
     /**
      * Whether reader support reading chunk of records
+     *
+     * @return true if support reading chunk of records
      */
     default boolean supportReadChunk() {
         return false;
@@ -45,13 +47,14 @@ public interface RecordReader<T> {
 
     /**
      * Read next chunk of records from the data source.
-     * Don't forget to override {@link RecordReader#supportReadChunk()}
+     * Don't forget to override {@link RecordReader#supportReadChunk()} <br>
+     * Note that if this method throws an exception, the error counter of
+     * batch will only increase by one.
      *
-     * @param size chunk size
      * @return the next chunk of record from the data source or null if the end of the data source is reached
      * @throws Exception if an error occurs during reading
      */
-    default List<T> readChunk(int size) throws Exception {
+    default List<T> readChunk() throws Exception {
         throw new UnsupportedOperationException();
     }
 

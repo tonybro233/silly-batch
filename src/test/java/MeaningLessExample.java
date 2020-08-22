@@ -27,8 +27,8 @@ public class MeaningLessExample {
                 .addListener(new ReadTimeListener())
                 .parallelRead(executor)
                 .parallelProcess(executor)
-                // .chunkSize(2)
                 .report(false)
+                .needConfirm(true)
                 .build()
                 .execute();
 

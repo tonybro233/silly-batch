@@ -80,9 +80,6 @@ public class SillyBatch<I, O> {
     // do reading, processing, writing in order
     private boolean forceOrder = false;
 
-    // chunk size for reading and writing
-    private int chunkSize = 1;
-
     // threshold of error
     private long failover = 0;
 
@@ -157,8 +154,6 @@ public class SillyBatch<I, O> {
     private volatile boolean forceClean;
 
     private AtomicBoolean started = new AtomicBoolean(false);
-
-    private boolean readChunk = false;
 
     private AtomicBoolean aborted;
 
@@ -265,10 +260,10 @@ public class SillyBatch<I, O> {
         }
 
         LOGGER.info("Prepare executing {} !\n\tparallelRead={}, \n\tparallelProcess={}, \n\tparallelWrite={},"
-                        + "\n\tforceOrder={}, \n\tchunk={}, \n\tfailover={}, \n\tpoolSize={},"
+                        + "\n\tforceOrder={}, \n\tfailover={}, \n\tpoolSize={},"
                         + "\n\treadQueueCapacity={}, \n\twriteQueueCapacity={}",
                 name, parallelRead, parallelProcess, parallelWrite,
-                forceOrder, chunkSize, failover, getMaxPoolSizeInfo(),
+                forceOrder, failover, getMaxPoolSizeInfo(),
                 rqc == Integer.MAX_VALUE ? "Infinite" : rqc,
                 wqc == Integer.MAX_VALUE ? "Infinite" : wqc);
 
@@ -314,7 +309,6 @@ public class SillyBatch<I, O> {
         processFinished = false;
         aborted = new AtomicBoolean(false);
         jobSeq = new AtomicLong();
-        readChunk = chunkSize > 1 && reader.supportReadChunk();
 
         readQueue = new ArrayBlockingQueue<>(readQueueCapacity);
         writeQueue = new ArrayBlockingQueue<>(writeQueueCapacity);
@@ -504,8 +498,8 @@ public class SillyBatch<I, O> {
         try {
             if (null != readListener) { readListener.beforeRead(); }
             List<? extends I> records = null;
-            if (readChunk) {
-                records = reader.readChunk(chunkSize);
+            if (reader.supportReadChunk()) {
+                records = reader.readChunk();
                 if (null != records) {
                     if (null != readListener) { readListener.afterRead(records); }
                     metrics.addReadCount(records.size());
@@ -524,7 +518,7 @@ public class SillyBatch<I, O> {
             if (!forceClean) {
                 LOGGER.error("({}) Error reading records", name, e);
                 onReadError(e);
-                metrics.addErrorCount(readChunk ? chunkSize : 1);
+                metrics.incrementErrorCount();
                 if (metrics.getErrorCount() > failover) {
                     throw new FailOverExceededException();
                 }
@@ -1176,14 +1170,6 @@ public class SillyBatch<I, O> {
     public void setForceOrder(boolean ordered) {
         throwExceptionIfStarted();
         this.forceOrder = ordered;
-    }
-
-    public void setChunkSize(int chunkSize) {
-        throwExceptionIfStarted();
-        if (chunkSize <= 0) {
-            throw new IllegalArgumentException("ChunkSize must be positive!");
-        }
-        this.chunkSize = chunkSize;
     }
 
     public void setFailover(long failover) {

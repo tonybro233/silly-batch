@@ -1,6 +1,7 @@
 package io.github.tonybro233.sillybatch.reader;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class CompositeRecordReader<T> implements RecordReader<T> {
@@ -107,48 +108,33 @@ public class CompositeRecordReader<T> implements RecordReader<T> {
     }
 
     @Override
-    public List<T> readChunk(int size) throws Exception {
+    public List<T> readChunk() throws Exception {
         if (currentIdx >= readers.size()) {
             return null;
         }
-        List<T> buffer = new ArrayList<>(size);
         int idx = currentIdx;
         try {
-            while (buffer.size() < size) {
-                RecordReader<? extends T> reader = readers.get(idx);
-                if (reader.supportReadChunk()) {
-                    List<? extends T> chunk = reader.readChunk(size - buffer.size());
-                    if (null == chunk) {
-                        idx++;
-                        if (idx >= readers.size()) {
-                            break;
-                        }
-                    } else {
-                        buffer.addAll(chunk);
-                    }
+            List<T> records = adaptiveRead(idx);
+            while (null == records) {
+                idx++;
+                if (idx < readers.size()) {
+                    records = adaptiveRead(idx);
                 } else {
-                    T record = reader.read();
-                    if (null == record) {
-                        idx++;
-                        if (idx >= readers.size()) {
-                            break;
-                        }
-                    } else {
-                        buffer.add(record);
-                    }
+                    break;
                 }
             }
-
-            if (buffer.size() > 0) {
-                return buffer;
-            } else {
-                return null;
-            }
+            return records;
         } finally {
             if (idx > currentIdx) {
                 currentIdx = idx;
             }
         }
-
     }
+
+    private List<T> adaptiveRead(int idx) throws Exception {
+        return readers.get(idx).supportReadChunk() ?
+                (List) readers.get(idx).readChunk() :
+                Collections.singletonList(readers.get(idx).read());
+    }
+
 }
