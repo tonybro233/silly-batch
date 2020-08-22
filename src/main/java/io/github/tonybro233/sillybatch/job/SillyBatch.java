@@ -11,6 +11,8 @@ import io.github.tonybro233.sillybatch.writer.RecordWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.management.ObjectName;
+import java.lang.management.ManagementFactory;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
@@ -165,6 +167,8 @@ public class SillyBatch<I, O> {
     /* ----------------------- assistant -------------------------- */
 
     private BatchMetrics metrics;
+
+    private ObjectName mbeanName;
 
     private BatchReporter reporter;
 
@@ -370,6 +374,11 @@ public class SillyBatch<I, O> {
 
         metrics.setTotal(reader.getTotal());
 
+        // register mbean
+        mbeanName = new ObjectName(String.format("sillybatch:type=metric,name=%s,timestamp=%d",
+                name, System.currentTimeMillis()));
+        ManagementFactory.getPlatformMBeanServer().registerMBean(metrics, mbeanName);
+
         LOGGER.info("({}) Execution started ...", name);
         reporter.start();
     }
@@ -444,6 +453,16 @@ public class SillyBatch<I, O> {
         closeReader();
         closeWriter();
         closeProcessor();
+
+        // Unregister mbean
+        try {
+            if (null != mbeanName) {
+                ManagementFactory.getPlatformMBeanServer().unregisterMBean(mbeanName);
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Unregister mbean failed", e);
+        }
+        mbeanName = null;
 
         started.set(false);
         LOGGER.info("({}) Execution {}!\n{}", name, aborted.get() ? "failed" : "succeeded", metrics.toString());

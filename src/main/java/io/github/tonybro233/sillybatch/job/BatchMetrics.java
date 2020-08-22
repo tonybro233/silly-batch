@@ -1,5 +1,7 @@
 package io.github.tonybro233.sillybatch.job;
 
+import io.github.tonybro233.sillybatch.util.SpeedCounter;
+
 import java.io.Serializable;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -9,7 +11,7 @@ import java.util.concurrent.atomic.LongAdder;
 /**
  * Metrics of batch job.
  */
-public class BatchMetrics implements Serializable {
+public class BatchMetrics implements BatchMetricsMBean, Serializable {
 
     private volatile LocalDateTime startTime;
 
@@ -17,20 +19,20 @@ public class BatchMetrics implements Serializable {
 
     private volatile Long total;
 
-    private LongAdder readCount = new LongAdder();
+    private SpeedCounter readCount = new SpeedCounter(1500);
 
-    private LongAdder processCount = new LongAdder();
+    private SpeedCounter processCount = new SpeedCounter(1500);
+
+    private SpeedCounter writeCount = new SpeedCounter(1500);
 
     private LongAdder filterCount = new LongAdder();
-
-    private LongAdder writeCount = new LongAdder();
 
     private LongAdder errorCount = new LongAdder();
 
     public String report() {
-        String str = "{Read: " + readCount.sum()
-                + ", Processed: " + processCount.sum()
-                + ", Written: " + writeCount.sum()
+        String str = "{Read: " + readCount.count()
+                + ", Processed: " + processCount.count()
+                + ", Written: " + writeCount.count()
                 + ", Filtered: " + filterCount.sum()
                 + ", Failed: " + errorCount.sum();
         if (null != total) {
@@ -47,31 +49,51 @@ public class BatchMetrics implements Serializable {
         if (null != startTime && null != endTime) {
             str += ", duration=" + Duration.between(startTime, endTime);
         }
-        str += ", readCount=" + readCount.sum()
-                + ", processCount=" + processCount.sum()
-                + ", writeCount=" + writeCount.sum()
+        str += ", readCount=" + readCount.count()
+                + ", processCount=" + processCount.count()
+                + ", writeCount=" + writeCount.count()
                 + ", filterCount=" + filterCount.sum()
                 + ", errorCount=" + errorCount.sum()
                 + '}';
         return str;
     }
 
+    @Override
     public long getReadCount() {
-        return readCount.sum();
+        return readCount.count();
     }
 
+    @Override
+    public String getReadSpeed() {
+        return readCount.currentSpeed();
+    }
+
+    @Override
     public long getProcessCount() {
-        return processCount.sum();
+        return processCount.count();
     }
 
+    @Override
+    public String getProcessSpeed() {
+        return processCount.currentSpeed();
+    }
+
+    @Override
+    public long getWriteCount() {
+        return writeCount.count();
+    }
+
+    @Override
+    public String getWriteSpeed() {
+        return writeCount.currentSpeed();
+    }
+
+    @Override
     public long getFilterCount() {
         return filterCount.sum();
     }
 
-    public long getWriteCount() {
-        return writeCount.sum();
-    }
-
+    @Override
     public long getErrorCount() {
         return errorCount.sum();
     }
@@ -116,6 +138,7 @@ public class BatchMetrics implements Serializable {
         errorCount.add(delta);
     }
 
+    @Override
     public LocalDateTime getStartTime() {
         return startTime;
     }
@@ -132,6 +155,7 @@ public class BatchMetrics implements Serializable {
         this.endTime = endTime;
     }
 
+    @Override
     public Long getTotal() {
         return total;
     }
