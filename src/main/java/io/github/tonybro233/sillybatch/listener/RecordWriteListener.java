@@ -2,23 +2,21 @@ package io.github.tonybro233.sillybatch.listener;
 
 import io.github.tonybro233.sillybatch.writer.RecordWriter;
 
-import java.util.List;
-
 public interface RecordWriteListener<T> {
 
     /**
-     * Called before {@link RecordWriter#write(List)}
+     * Called before {@link RecordWriter#write(T)}
      */
-    void beforeWrite(List<? extends T> records);
+    void beforeWrite(T record);
 
     /**
-     * Called after {@link RecordWriter#write(List)}
+     * Called after {@link RecordWriter#write(T)}
      */
-    void afterWrite(List<? extends T> records);
+    void afterWrite(T record);
 
     /**
-     * Called if an exception was thrown from {@link RecordWriter#write(List)}.
+     * Called if an exception was thrown from {@link RecordWriter#write(T)}.
      */
-    void onWriteError(Exception exception, List<? extends T> records);
+    void onWriteError(Exception exception, T record);
 
 }

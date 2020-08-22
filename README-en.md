@@ -38,7 +38,6 @@ In addition to Reader, Processor and Writer, Silly Batch also offers a series of
 | parallelProcess    | Boolean | whether to process data in parallel              | false         |
 | parallelWrite      | Boolean | whether to write data in parallel                | false         |
 | forceOrder         | Boolean | force order of read, process, write              | false         |
-| chunkSize          | Integer | buffer size of read and write                    | 1             |
 | failOver           | Long    | threshold of exception                           | 0             |
 | poolSize           | Integer | default executor's pool size                     | cpu core * 2  |
 | readQueueCapacity  | Integer | capacity of internal read queue                  | 1000          |
@@ -67,10 +66,10 @@ public class MeaningLessExample {
                 .addListener(new ReadTimeListener())
                 .parallelRead(true)
                 .parallelProcess(true)
-                // .chunkSize(2)
                 .report(false)
                 // .forceOrder(true)
                 // .failover(10)
+                .needConfirm(true)
                 .build()
                 .execute();
     }
@@ -159,9 +158,9 @@ public class MeaningLessExample {
 
 ### Notes
 
-- Using SLF4J logging api，easy to integrate with log implementation.
+- Using SLF4J logging api，easy to integrate with log implementation. Support monitor running status from MBean.
 - The way to achieve parallel reads is to submit self-submit reading job to the thread pool, the initial number of job is thread pool's size.
 - For each steps, Silly Batch will create thread pool when using parallel mode, it means that there are up to three default thread pools. You can provide external thread pools, even specify one thread pool for three steps (not recommend). If you need to use external thread pools, be sure to understand how Silly Batch works, then adjust the blocking queue's capacity of the thread pool and specify appropriate `ejectedExecutionHandler` for it.
 - Parallelism means sacrificing order, Silly Batch can also handle data in order(by default)，and support using `forceOrder` option to force doing processing after read over, doing writing after process over. Notice that in forceOrder mode, internal readQueue and writeQueue will change to unbounded queue, all data will be read into memory, make sure there is enough memory or it may cause OOM error.
 - When in parallel mode, job may not stopped immediately (limited by java thread model) when failed(exceed fail over), but will as soon as possible.
-- Be careful not to make your computer crash down.
+- Be careful not to let your computer crash down.

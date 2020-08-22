@@ -11,6 +11,8 @@ import io.github.tonybro233.sillybatch.writer.RecordWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.management.ObjectName;
+import java.lang.management.ManagementFactory;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
@@ -78,9 +80,6 @@ public class SillyBatch<I, O> {
     // do reading, processing, writing in order
     private boolean forceOrder = false;
 
-    // chunk size for reading and writing
-    private int chunkSize = 1;
-
     // threshold of error
     private long failover = 0;
 
@@ -94,10 +93,10 @@ public class SillyBatch<I, O> {
     private int poolSize = Runtime.getRuntime().availableProcessors() * 2;
 
     // capacity of read queue, also affect internal process executor's work queue
-    private int readQueueCapacity = 0;
+    private int readQueueCapacity = DEFAULT_QUEUE_SIZE;
 
     // capacity of write queue, also affect internal write executor's work queue
-    private int writeQueueCapacity = 0;
+    private int writeQueueCapacity = DEFAULT_QUEUE_SIZE;
 
     // whether user should confirm the execution before start
     private boolean needConfirm = false;
@@ -132,9 +131,9 @@ public class SillyBatch<I, O> {
 
     private Queue<Future<?>> writeJobQueue;
 
-    private LinkedBlockingQueue<I> readQueue;
+    private BlockingQueue<I> readQueue;
 
-    private LinkedBlockingQueue<O> writeQueue;
+    private BlockingQueue<O> writeQueue;
 
     private CountDownLatch readOverLatch;
 
@@ -156,10 +155,6 @@ public class SillyBatch<I, O> {
 
     private AtomicBoolean started = new AtomicBoolean(false);
 
-    private volatile boolean readChunk = false;
-
-    private int bufferSize;
-
     private AtomicBoolean aborted;
 
     private AtomicLong jobSeq;
@@ -167,6 +162,8 @@ public class SillyBatch<I, O> {
     /* ----------------------- assistant -------------------------- */
 
     private BatchMetrics metrics;
+
+    private ObjectName mbeanName;
 
     private BatchReporter reporter;
 
@@ -181,6 +178,8 @@ public class SillyBatch<I, O> {
     /* ------------------------- const -------------------------- */
 
     public static final int DEFAULT_QUEUE_SIZE = 1000;
+
+    private static final int EXECUTOR_QUEUE_SIZE = 10;
 
     private static final long QUEUE_WAIT = 500L;
 
@@ -248,41 +247,22 @@ public class SillyBatch<I, O> {
     }
 
     private boolean prepare() {
-        int rqc, wqc;
-        if (forceOrder) {
-            if ((readQueueCapacity > 0 && readQueueCapacity != Integer.MAX_VALUE)
-                    || (writeQueueCapacity > 0 && writeQueueCapacity != Integer.MAX_VALUE)) {
-                LOGGER.error("ForceOrder option is not compatible with limited queue capacity");
-                return false;
-            }
-            rqc = Integer.MAX_VALUE;
-            wqc = Integer.MAX_VALUE;
-        } else {
-            rqc = readQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : readQueueCapacity;
-            wqc = writeQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : writeQueueCapacity;
-        }
-
         LOGGER.info("Prepare executing {} !\n\tparallelRead={}, \n\tparallelProcess={}, \n\tparallelWrite={},"
-                        + "\n\tforceOrder={}, \n\tchunk={}, \n\tfailover={}, \n\tpoolSize={},"
+                        + "\n\tforceOrder={}, \n\tfailover={}, \n\tpoolSize={},"
                         + "\n\treadQueueCapacity={}, \n\twriteQueueCapacity={}",
                 name, parallelRead, parallelProcess, parallelWrite,
-                forceOrder, chunkSize, failover, getMaxPoolSizeInfo(),
-                rqc == Integer.MAX_VALUE ? "Infinite" : rqc,
-                wqc == Integer.MAX_VALUE ? "Infinite" : wqc);
-
-        if (writeQueueCapacity != Integer.MAX_VALUE && readQueueCapacity == Integer.MAX_VALUE) {
-            LOGGER.warn("Write queue's capacity is limited while read queue's capacity is infinite, "
-                    + "this may cause data pile up in read queue !");
-        }
+                forceOrder, failover, getMaxPoolSizeInfo(),
+                forceOrder ? "Infinite" : readQueueCapacity,
+                forceOrder ? "Infinite" : writeQueueCapacity);
 
         if (needConfirm) {
             System.out.print("Do you confirm?(Y/N): ");
             Scanner sc = new Scanner(System.in);
             while (sc.hasNextLine()) {
                 String s = sc.nextLine().trim().toUpperCase();
-                if (s.equals("Y")) {
+                if ("Y".equals(s)) {
                     break;
-                } else if (s.equals("N")) {
+                } else if ("N".equals(s)) {
                     return false;
                 }
                 System.out.print("Do you confirm?(Y/N): ");
@@ -295,14 +275,6 @@ public class SillyBatch<I, O> {
     private void init() throws Exception {
         tryStart();
 
-        if (forceOrder) {
-            readQueueCapacity = Integer.MAX_VALUE;
-            writeQueueCapacity = Integer.MAX_VALUE;
-        } else {
-            readQueueCapacity = readQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : readQueueCapacity;
-            writeQueueCapacity = writeQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : writeQueueCapacity;
-        }
-
         mainThread = Thread.currentThread();
         reporter = new BatchReporter();
         forceClean = false;
@@ -312,11 +284,9 @@ public class SillyBatch<I, O> {
         processFinished = false;
         aborted = new AtomicBoolean(false);
         jobSeq = new AtomicLong();
-        readChunk = chunkSize > 1 && reader.supportReadChunk();
-        bufferSize = Math.max(10, chunkSize);
 
-        readQueue = new LinkedBlockingQueue<>(readQueueCapacity);
-        writeQueue = new LinkedBlockingQueue<>(writeQueueCapacity);
+        readQueue = forceOrder ? new LinkedBlockingQueue<>() : new ArrayBlockingQueue<>(readQueueCapacity);
+        writeQueue = forceOrder ? new LinkedBlockingQueue<>() : new ArrayBlockingQueue<>(writeQueueCapacity);
 
         if (parallelRead) {
             readJobQueue = new LinkedList<>();
@@ -337,7 +307,7 @@ public class SillyBatch<I, O> {
                 processExecutor = new ThreadPoolExecutor(
                         poolSize, poolSize,
                         THREAD_TIMEOUT, TimeUnit.MILLISECONDS,
-                        new LinkedBlockingQueue<>(readQueueCapacity),
+                        new ArrayBlockingQueue<>(EXECUTOR_QUEUE_SIZE),
                         new BasicThreadFactory.Builder()
                                 .namingPattern("sb-processor-%d")
                                 .priority(Thread.NORM_PRIORITY + 1)
@@ -352,7 +322,7 @@ public class SillyBatch<I, O> {
                 writeExecutor = new ThreadPoolExecutor(
                         poolSize, poolSize,
                         THREAD_TIMEOUT, TimeUnit.MILLISECONDS,
-                        new LinkedBlockingQueue<>(writeQueueCapacity),
+                        new ArrayBlockingQueue<>(EXECUTOR_QUEUE_SIZE),
                         new BasicThreadFactory.Builder()
                                 .namingPattern("sb-writer-%d")
                                 .priority(Thread.NORM_PRIORITY + 2)
@@ -372,6 +342,11 @@ public class SillyBatch<I, O> {
         openProcessor();
 
         metrics.setTotal(reader.getTotal());
+
+        // register mbean
+        mbeanName = new ObjectName(String.format("sillybatch:type=metric,name=%s,timestamp=%d",
+                name, System.currentTimeMillis()));
+        ManagementFactory.getPlatformMBeanServer().registerMBean(metrics, mbeanName);
 
         LOGGER.info("({}) Execution started ...", name);
         reporter.start();
@@ -448,6 +423,16 @@ public class SillyBatch<I, O> {
         closeWriter();
         closeProcessor();
 
+        // Unregister mbean
+        try {
+            if (null != mbeanName) {
+                ManagementFactory.getPlatformMBeanServer().unregisterMBean(mbeanName);
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Unregister mbean failed", e);
+        }
+        mbeanName = null;
+
         started.set(false);
         LOGGER.info("({}) Execution {}!\n{}", name, aborted.get() ? "failed" : "succeeded", metrics.toString());
     }
@@ -488,8 +473,8 @@ public class SillyBatch<I, O> {
         try {
             if (null != readListener) { readListener.beforeRead(); }
             List<? extends I> records = null;
-            if (readChunk) {
-                records = reader.readChunk(chunkSize);
+            if (reader.supportReadChunk()) {
+                records = reader.readChunk();
                 if (null != records) {
                     if (null != readListener) { readListener.afterRead(records); }
                     metrics.addReadCount(records.size());
@@ -508,7 +493,7 @@ public class SillyBatch<I, O> {
             if (!forceClean) {
                 LOGGER.error("({}) Error reading records", name, e);
                 onReadError(e);
-                metrics.addErrorCount(readChunk ? chunkSize : 1);
+                metrics.incrementErrorCount();
                 if (metrics.getErrorCount() > failover) {
                     throw new FailOverExceededException();
                 }
@@ -558,21 +543,21 @@ public class SillyBatch<I, O> {
         }
     }
 
-    private void doWrite(List<O> records) {
+    private void doWrite(O record) {
         if (aborted.get()) {
             throw new BatchAbortedException();
         }
 
         try {
-            if (null != writeListener) { writeListener.beforeWrite(records); }
-            writer.write(records);
-            metrics.addWriteCount(records.size());
-            if (null != writeListener) { writeListener.afterWrite(records); }
+            if (null != writeListener) { writeListener.beforeWrite(record); }
+            writer.write(record);
+            metrics.incrementWriteCount();
+            if (null != writeListener) { writeListener.afterWrite(record); }
         } catch (Exception e) {
             if (!forceClean) {
                 LOGGER.error("({}) Exception in writing records", name, e);
-                onWriteError(e, records);
-                metrics.addErrorCount(records.size());
+                onWriteError(e, record);
+                metrics.incrementErrorCount();
                 if (metrics.getErrorCount() > failover) {
                     throw new FailOverExceededException();
                 }
@@ -591,12 +576,12 @@ public class SillyBatch<I, O> {
         }
     }
 
-    private void writeRecords(List<O> records) {
+    private void writeRecord(O record) {
         if (parallelWrite) {
             // maybe caller run
-            writeJobQueue.offer(writeExecutor.submit(new RecordWriteJob(records)));
+            writeJobQueue.offer(writeExecutor.submit(new RecordWriteJob(record)));
         } else {
-            doWrite(records);
+            doWrite(record);
         }
     }
 
@@ -620,10 +605,10 @@ public class SillyBatch<I, O> {
         }
     }
 
-    private void onWriteError(Exception e, List<O> records) {
+    private void onWriteError(Exception e, O record) {
         try {
             if (null != writeListener) {
-                writeListener.onWriteError(e, records);
+                writeListener.onWriteError(e, record);
             }
         } catch (Exception ex) {
             LOGGER.error("({}) Read listener error.", name, ex);
@@ -836,17 +821,11 @@ public class SillyBatch<I, O> {
             LOGGER.info("({}) Write manager started ...", name);
             try {
                 O record;
-                List<O> buffer = new ArrayList<>(bufferSize);
                 while (!processFinished) {
                     record = writeQueue.poll(QUEUE_WAIT, TimeUnit.MILLISECONDS);
                     if (null != record) {
-                        buffer.add(record);
-                        if (buffer.size() == chunkSize) {
-                            writeRecords(buffer);
-                            buffer = new ArrayList<>(bufferSize);
-                        }
+                        writeRecord(record);
                     }
-
                     if (aborted.get()) {
                         return;
                     }
@@ -854,19 +833,10 @@ public class SillyBatch<I, O> {
 
                 // flush
                 while ((record = writeQueue.poll()) != null) {
-                    buffer.add(record);
-                    if (buffer.size() == chunkSize) {
-                        writeRecords(buffer);
-                        buffer = new ArrayList<>(bufferSize);
-                    }
-
+                    writeRecord(record);
                     if (aborted.get()) {
                         return;
                     }
-                }
-
-                if (!buffer.isEmpty()) {
-                    writeRecords(buffer);
                 }
 
                 waitForJobs(writeJobQueue);
@@ -1010,11 +980,11 @@ public class SillyBatch<I, O> {
 
         static final int PRIORITY = 0;
 
-        List<O> records;
+        O record;
 
-        public RecordWriteJob(List<O> records) {
+        public RecordWriteJob(O record) {
             super(PRIORITY);
-            this.records = records;
+            this.record = record;
         }
 
         @Override
@@ -1023,7 +993,7 @@ public class SillyBatch<I, O> {
                 return;
             }
             try {
-                doWrite(records);
+                doWrite(record);
             } catch (FailOverExceededException e) {
                 // prevent repeat log
                 if (aborted.compareAndSet(false, true)) {
@@ -1175,14 +1145,6 @@ public class SillyBatch<I, O> {
     public void setForceOrder(boolean ordered) {
         throwExceptionIfStarted();
         this.forceOrder = ordered;
-    }
-
-    public void setChunkSize(int chunkSize) {
-        throwExceptionIfStarted();
-        if (chunkSize <= 0) {
-            throw new IllegalArgumentException("ChunkSize must be positive!");
-        }
-        this.chunkSize = chunkSize;
     }
 
     public void setFailover(long failover) {
