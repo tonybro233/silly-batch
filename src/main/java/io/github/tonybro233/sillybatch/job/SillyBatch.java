@@ -93,10 +93,10 @@ public class SillyBatch<I, O> {
     private int poolSize = Runtime.getRuntime().availableProcessors() * 2;
 
     // capacity of read queue, also affect internal process executor's work queue
-    private int readQueueCapacity = 0;
+    private int readQueueCapacity = DEFAULT_QUEUE_SIZE;
 
     // capacity of write queue, also affect internal write executor's work queue
-    private int writeQueueCapacity = 0;
+    private int writeQueueCapacity = DEFAULT_QUEUE_SIZE;
 
     // whether user should confirm the execution before start
     private boolean needConfirm = false;
@@ -131,9 +131,9 @@ public class SillyBatch<I, O> {
 
     private Queue<Future<?>> writeJobQueue;
 
-    private ArrayBlockingQueue<I> readQueue;
+    private BlockingQueue<I> readQueue;
 
-    private ArrayBlockingQueue<O> writeQueue;
+    private BlockingQueue<O> writeQueue;
 
     private CountDownLatch readOverLatch;
 
@@ -178,6 +178,8 @@ public class SillyBatch<I, O> {
     /* ------------------------- const -------------------------- */
 
     public static final int DEFAULT_QUEUE_SIZE = 1000;
+
+    private static final int EXECUTOR_QUEUE_SIZE = 10;
 
     private static final long QUEUE_WAIT = 500L;
 
@@ -245,41 +247,22 @@ public class SillyBatch<I, O> {
     }
 
     private boolean prepare() {
-        int rqc, wqc;
-        if (forceOrder) {
-            if ((readQueueCapacity > 0 && readQueueCapacity != Integer.MAX_VALUE)
-                    || (writeQueueCapacity > 0 && writeQueueCapacity != Integer.MAX_VALUE)) {
-                LOGGER.error("ForceOrder option is not compatible with limited queue capacity");
-                return false;
-            }
-            rqc = Integer.MAX_VALUE;
-            wqc = Integer.MAX_VALUE;
-        } else {
-            rqc = readQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : readQueueCapacity;
-            wqc = writeQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : writeQueueCapacity;
-        }
-
         LOGGER.info("Prepare executing {} !\n\tparallelRead={}, \n\tparallelProcess={}, \n\tparallelWrite={},"
                         + "\n\tforceOrder={}, \n\tfailover={}, \n\tpoolSize={},"
                         + "\n\treadQueueCapacity={}, \n\twriteQueueCapacity={}",
                 name, parallelRead, parallelProcess, parallelWrite,
                 forceOrder, failover, getMaxPoolSizeInfo(),
-                rqc == Integer.MAX_VALUE ? "Infinite" : rqc,
-                wqc == Integer.MAX_VALUE ? "Infinite" : wqc);
-
-        if (writeQueueCapacity != Integer.MAX_VALUE && readQueueCapacity == Integer.MAX_VALUE) {
-            LOGGER.warn("Write queue's capacity is limited while read queue's capacity is infinite, "
-                    + "this may cause data pile up in read queue !");
-        }
+                forceOrder ? "Infinite" : readQueueCapacity,
+                forceOrder ? "Infinite" : writeQueueCapacity);
 
         if (needConfirm) {
             System.out.print("Do you confirm?(Y/N): ");
             Scanner sc = new Scanner(System.in);
             while (sc.hasNextLine()) {
                 String s = sc.nextLine().trim().toUpperCase();
-                if (s.equals("Y")) {
+                if ("Y".equals(s)) {
                     break;
-                } else if (s.equals("N")) {
+                } else if ("N".equals(s)) {
                     return false;
                 }
                 System.out.print("Do you confirm?(Y/N): ");
@@ -292,14 +275,6 @@ public class SillyBatch<I, O> {
     private void init() throws Exception {
         tryStart();
 
-        if (forceOrder) {
-            readQueueCapacity = Integer.MAX_VALUE;
-            writeQueueCapacity = Integer.MAX_VALUE;
-        } else {
-            readQueueCapacity = readQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : readQueueCapacity;
-            writeQueueCapacity = writeQueueCapacity == 0 ? DEFAULT_QUEUE_SIZE : writeQueueCapacity;
-        }
-
         mainThread = Thread.currentThread();
         reporter = new BatchReporter();
         forceClean = false;
@@ -310,8 +285,8 @@ public class SillyBatch<I, O> {
         aborted = new AtomicBoolean(false);
         jobSeq = new AtomicLong();
 
-        readQueue = new ArrayBlockingQueue<>(readQueueCapacity);
-        writeQueue = new ArrayBlockingQueue<>(writeQueueCapacity);
+        readQueue = forceOrder ? new LinkedBlockingQueue<>() : new ArrayBlockingQueue<>(readQueueCapacity);
+        writeQueue = forceOrder ? new LinkedBlockingQueue<>() : new ArrayBlockingQueue<>(writeQueueCapacity);
 
         if (parallelRead) {
             readJobQueue = new LinkedList<>();
@@ -332,7 +307,7 @@ public class SillyBatch<I, O> {
                 processExecutor = new ThreadPoolExecutor(
                         poolSize, poolSize,
                         THREAD_TIMEOUT, TimeUnit.MILLISECONDS,
-                        new ArrayBlockingQueue<>(readQueueCapacity),
+                        new ArrayBlockingQueue<>(EXECUTOR_QUEUE_SIZE),
                         new BasicThreadFactory.Builder()
                                 .namingPattern("sb-processor-%d")
                                 .priority(Thread.NORM_PRIORITY + 1)
@@ -347,7 +322,7 @@ public class SillyBatch<I, O> {
                 writeExecutor = new ThreadPoolExecutor(
                         poolSize, poolSize,
                         THREAD_TIMEOUT, TimeUnit.MILLISECONDS,
-                        new ArrayBlockingQueue<>(writeQueueCapacity),
+                        new ArrayBlockingQueue<>(EXECUTOR_QUEUE_SIZE),
                         new BasicThreadFactory.Builder()
                                 .namingPattern("sb-writer-%d")
                                 .priority(Thread.NORM_PRIORITY + 2)
