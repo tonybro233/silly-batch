@@ -6,7 +6,7 @@
 
     <groupId>io.github.tonybro233</groupId>
     <artifactId>sillybatch</artifactId>
-    <version>1.4-SNAPSHOT</version>
+    <version>1.5-SNAPSHOT</version>
 
     <name>Silly Batch</name>
     <description>Simple batch framework for java</description>
