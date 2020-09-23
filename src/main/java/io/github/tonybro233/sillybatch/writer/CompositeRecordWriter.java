@@ -28,14 +28,14 @@ public class CompositeRecordWriter <T> implements RecordWriter<T> {
 
     @Override
     public void open() throws Exception {
-        for (RecordWriter writer : writers) {
+        for (RecordWriter<? super T> writer : writers) {
             writer.open();
         }
     }
 
     @Override
     public void close() throws Exception {
-        for (RecordWriter writer : writers) {
+        for (RecordWriter<? super T> writer : writers) {
             writer.close();
         }
     }

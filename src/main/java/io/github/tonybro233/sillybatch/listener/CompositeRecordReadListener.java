@@ -25,23 +25,23 @@ public class CompositeRecordReadListener<T> implements RecordReadListener<T> {
 
     @Override
     public void beforeRead() {
-        for (RecordReadListener listener : listeners) {
+        for (RecordReadListener<? super T> listener : listeners) {
             listener.beforeRead();
         }
     }
 
     @Override
     public void afterRead(T record) {
-        for (ListIterator<RecordReadListener<? super T>> iterator
-             = listeners.listIterator(listeners.size()); iterator.hasPrevious();) {
+        for (ListIterator<RecordReadListener<? super T>> iterator =
+             listeners.listIterator(listeners.size()); iterator.hasPrevious();) {
             iterator.previous().afterRead(record);
         }
     }
 
     @Override
     public void onReadError(Exception ex) {
-        for (ListIterator<RecordReadListener<? super T>> iterator
-             = listeners.listIterator(listeners.size()); iterator.hasPrevious();) {
+        for (ListIterator<RecordReadListener<? super T>> iterator =
+             listeners.listIterator(listeners.size()); iterator.hasPrevious();) {
             iterator.previous().onReadError(ex);
         }
     }

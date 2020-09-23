@@ -153,7 +153,7 @@ public class SillyBatch<I, O> {
 
     private volatile boolean forceClean;
 
-    private AtomicBoolean started = new AtomicBoolean(false);
+    private final AtomicBoolean started = new AtomicBoolean(false);
 
     private AtomicBoolean aborted;
 
@@ -325,7 +325,7 @@ public class SillyBatch<I, O> {
                         new ArrayBlockingQueue<>(EXECUTOR_QUEUE_SIZE),
                         new BasicThreadFactory.Builder()
                                 .namingPattern("sb-writer-%d")
-                                .priority(Thread.NORM_PRIORITY + 2)
+                                .priority(Thread.NORM_PRIORITY + 3)
                                 .build(),
                         new ThreadPoolExecutor.CallerRunsPolicy());
             }
@@ -738,7 +738,7 @@ public class SillyBatch<I, O> {
                 aborted.set(true);
                 mainThread.interrupt();
             } catch (Throwable t) {
-                LOGGER.error("({}) System error happened while reading records, abort execution.");
+                LOGGER.error("({}) System error happened while reading records, abort execution.", name);
                 aborted.set(true);
                 mainThread.interrupt();
                 noticeIfOOM(t);
@@ -857,7 +857,7 @@ public class SillyBatch<I, O> {
                 aborted.set(true);
                 mainThread.interrupt();
             } catch (Throwable t) {
-                LOGGER.error("({}) System error happened while writing records, abort execution.");
+                LOGGER.error("({}) System error happened while writing records, abort execution.", name);
                 aborted.set(true);
                 mainThread.interrupt();
                 noticeIfOOM(t);

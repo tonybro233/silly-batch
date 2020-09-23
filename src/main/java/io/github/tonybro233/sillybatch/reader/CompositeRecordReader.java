@@ -6,7 +6,7 @@ import java.util.List;
 
 public class CompositeRecordReader<T> implements RecordReader<T> {
 
-    private List<RecordReader<? extends T>> readers = new ArrayList<>();
+    private final List<RecordReader<? extends T>> readers = new ArrayList<>();
 
     private volatile int currentIdx;
 
@@ -45,7 +45,7 @@ public class CompositeRecordReader<T> implements RecordReader<T> {
             }
         } else {
             // decrease complexity, open all of them rather than open in order
-            for (RecordReader reader : readers) {
+            for (RecordReader<? extends T> reader : readers) {
                 reader.open();
             }
         }
@@ -54,7 +54,7 @@ public class CompositeRecordReader<T> implements RecordReader<T> {
     @Override
     public void close() throws Exception {
         currentIdx = readers.size();
-        for (RecordReader reader : readers) {
+        for (RecordReader<? extends T> reader : readers) {
             reader.close();
         }
     }
@@ -86,7 +86,7 @@ public class CompositeRecordReader<T> implements RecordReader<T> {
     @Override
     public Long getTotal() throws Exception {
         long total = 0;
-        for (RecordReader reader : readers) {
+        for (RecordReader<? extends T> reader : readers) {
             Long t = reader.getTotal();
             if (t == null) {
                 return null;
@@ -99,7 +99,7 @@ public class CompositeRecordReader<T> implements RecordReader<T> {
 
     @Override
     public boolean supportReadChunk() {
-        for (RecordReader reader : readers) {
+        for (RecordReader<? extends T> reader : readers) {
             if (reader.supportReadChunk()) {
                 return true;
             }
@@ -131,9 +131,10 @@ public class CompositeRecordReader<T> implements RecordReader<T> {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private List<T> adaptiveRead(int idx) throws Exception {
         return readers.get(idx).supportReadChunk() ?
-                (List) readers.get(idx).readChunk() :
+                (List<T>) readers.get(idx).readChunk() :
                 Collections.singletonList(readers.get(idx).read());
     }
 
