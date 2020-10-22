@@ -41,12 +41,12 @@ import java.util.concurrent.atomic.AtomicLong;
  *            ╰────────╯                          ╰───────────╯                          ╰─────────╯
  * </pre>
  *
- * <p>While using parallel mode, you have to ensure that handlers
+ * <p>While using parallel mode, you have to ensure that related handlers
  * ({@link RecordReader}, {@link RecordProcessor}, {@link RecordWriter})
  * and listeners ({@link RecordReadListener}, {@link RecordProcessListener},
  * {@link RecordWriteListener}) are thread-safe.
  *
- * <p>Using {@link SillyBatchBuilder} to build instances.
+ * <p>Use {@link SillyBatchBuilder} to build instances.
  *
  * @author tony
  */
@@ -187,8 +187,6 @@ public class SillyBatch<I, O> {
 
     private static final long THREAD_TIMEOUT = 5000L;
 
-    private static final double THRESHOLD = 1.1D;
-
     /* ------------------------- main -------------------------- */
 
     /**
@@ -310,7 +308,7 @@ public class SillyBatch<I, O> {
                         new ArrayBlockingQueue<>(EXECUTOR_QUEUE_SIZE),
                         new BasicThreadFactory.Builder()
                                 .namingPattern("sb-processor-%d")
-                                .priority(Thread.NORM_PRIORITY + 1)
+                                .priority(Thread.NORM_PRIORITY + 2)
                                 .build(),
                         new ThreadPoolExecutor.CallerRunsPolicy());
                 ((ThreadPoolExecutor) processExecutor).allowCoreThreadTimeOut(true);
