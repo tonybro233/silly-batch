@@ -32,13 +32,13 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <pre>
  *             executor                             executor                              executor
- *            ╭────────╮                          ╭───────────╮                          ╭────────╮
- *            │ read() │                          │ process() │                          │ write()│
- * ╭──────╮ / │  ···   │ \   queue    ╭───────╮ / │    ···    │ \   queue    ╭───────╮ / │  ···   │
- * │source│ ─ │ read() │ ─ │=======│->│manager│ ─ │ process() │ ─ │=======│->│manager│ ─ │ write()│
- * ╰──────╯ \ │  ···   │ /            ╰───────╯ \ │    ···    │ /            ╰───────╯ \ │  ···   │
- *            │ read() │                          │ process() │                          │ write()│
- *            ╰────────╯                          ╰───────────╯                          ╰────────╯
+ *            ╭────────╮                          ╭───────────╮                          ╭─────────╮
+ *            │ read() │                          │ process() │                          │ write() │
+ * ╭──────╮ / │  ···   │ \   queue    ╭───────╮ / │    ···    │ \   queue    ╭───────╮ / │  ···    │
+ * │source│ ─ │ read() │ ─ │=======│->│manager│ ─ │ process() │ ─ │=======│->│manager│ ─ │ write() │
+ * ╰──────╯ \ │  ···   │ /            ╰───────╯ \ │    ···    │ /            ╰───────╯ \ │  ···    │
+ *            │ read() │                          │ process() │                          │ write() │
+ *            ╰────────╯                          ╰───────────╯                          ╰─────────╯
  * </pre>
  *
  * <p>While using parallel mode, you have to ensure that handlers
