@@ -21,6 +21,11 @@ public class TextLineWriter<T> implements RecordWriter<T> {
         this.filePath = filePath;
     }
 
+    public TextLineWriter(String filePath, Charset charset) {
+        this.filePath = filePath;
+        this.charset = charset;
+    }
+
     public TextLineWriter(String filePath, Function<T, String> stringer) {
         this.filePath = filePath;
         this.stringer = stringer;
@@ -39,7 +44,7 @@ public class TextLineWriter<T> implements RecordWriter<T> {
         if (!append && file.exists()) {
             throw new IllegalArgumentException("The output file already exist! Path: " + filePath);
         }
-        if (!Files.isWritable(file.toPath())) {
+        if (append && !Files.isWritable(file.toPath())) {
             throw new IllegalArgumentException("Unable to write file! Path: " + filePath);
         }
         writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, append), charset));

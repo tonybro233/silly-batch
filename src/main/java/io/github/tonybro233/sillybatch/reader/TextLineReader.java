@@ -30,7 +30,7 @@ public class TextLineReader implements RecordReader<String> {
         if (!file.isFile()) {
             throw new IllegalArgumentException("The input path should be a file! Path: " + filePath);
         }
-        if (Files.isReadable(file.toPath())) {
+        if (!Files.isReadable(file.toPath())) {
             throw new IllegalArgumentException("Unable to read file! Path: " + filePath);
         }
         reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), charset));
