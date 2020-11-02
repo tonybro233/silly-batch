@@ -9,7 +9,7 @@ Available from Maven Central.
 <dependency>
     <groupId>io.github.tonybro233</groupId>
     <artifactId>sillybatch</artifactId>
-    <version>1.3</version>
+    <version>1.4</version>
 </dependency>
 ```
 
